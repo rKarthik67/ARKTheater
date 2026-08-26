@@ -1,0 +1,86 @@
+name: ark_theater
+description: >
+  ARKTheater - a movie & TV streaming app that resolves ad-free direct video
+  sources via ARKVideoScrapper and plays them natively. Targets mobile,
+  tablet, desktop, macOS and iPadOS from a single Flutter codebase.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+  flutter: '>=3.19.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Networking
+  dio: ^5.7.0
+  # Used by lib/video_providers/ (ported from flixquest's scraper client
+  # pattern) to talk to ARKVideoScrapper's /api/v2 endpoints and to the
+  # direct VixSrc fallback provider - kept as `http` rather than `dio`
+  # to match upstream's client code as closely as possible.
+  http: ^1.2.2
+
+  # Env config (TMDB key, scraper base url) without hardcoding secrets
+  flutter_dotenv: ^5.2.1
+
+  # State management (simple, no codegen)
+  provider: ^6.1.2
+
+  # Video playback: two engines, split by platform - PlayerScreen picks
+  # between them at runtime (see lib/screens/player_screen.dart).
+  #
+  # - better_player_plus (Android/iOS): wraps ExoPlayer/AVPlayer, the exact
+  #   same engine flixquest itself uses. Its native HTTP source handling
+  #   (adaptive retry, chunked seeking, malformed-range recovery) is
+  #   meaningfully more resilient against the flaky scraped CDNs this app
+  #   plays from than libmpv is on Android - which is the actual gap behind
+  #   "seeking hangs/restarts" reports on mobile. Pinned to 1.0.8 (not the
+  #   newest release) because newer versions raise the minimum Dart/Flutter
+  #   SDK past what this project targets.
+  # - media_kit (Windows/macOS/Linux): better_player_plus has no desktop
+  #   support at all, so desktop keeps the engine that actually runs there.
+  better_player_plus: 1.0.8
+  media_kit: ^1.1.11
+  media_kit_video: ^1.2.5
+  media_kit_libs_video: ^1.0.5
+
+  # In-app browser used as a fallback when native stream extraction fails
+  # or a resolved link won't play (short-lived/single-use CDN tokens,
+  # player fingerprint mismatches). Renders the real embed page - so
+  # playback works exactly as it does on the source site - while we block
+  # popups and known ad-host navigations from inside it.
+  flutter_inappwebview: ^6.1.5
+
+  # Images
+  cached_network_image: ^3.4.1
+  # Renders the Wikimedia Commons .svg logos in lib/models/platform_filter.dart
+  # for the Platforms screen (OTT platforms / production houses).
+  flutter_svg: ^2.0.10+1
+
+  # Local persistence for watchlist / continue-watching
+  shared_preferences: ^2.3.3
+
+  # Icons
+  cupertino_icons: ^1.0.8
+
+  # Fullscreen / orientation control while a video is playing
+  wakelock_plus: ^1.2.10
+
+  # Temp-file staging for the splash screen's chime sound (see
+  # lib/screens/splash_screen.dart) - already present transitively, listed
+  # directly since app code imports it.
+  path_provider: ^2.1.5
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
+    - assets/images/
+    - assets/audio/

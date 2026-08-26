@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches AppTheme.background (lib/core/theme.dart) - shown behind
+         the native launch_background while the Flutter engine starts, so
+         there's no white flash before the animated Dart splash takes over. -->
+    <color name="launch_background">#FF0A0612</color>
+</resources>
