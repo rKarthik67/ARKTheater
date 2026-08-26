@@ -99,6 +99,10 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
         allowedScreenSleep: false,
         fullScreenByDefault: false,
         controlsConfiguration: BetterPlayerControlsConfiguration(
+          // Default is Colors.black87 - noticeably darker than most
+          // players' tap-to-reveal overlay. Lightened to 40% opacity so
+          // the video stays more visible behind the controls.
+          controlBarColor: Colors.black.withOpacity(0.4),
           enableFullscreen: true,
           enablePlaybackSpeed: true,
           enableSubtitles: true,
