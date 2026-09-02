@@ -5,6 +5,7 @@ import '../models/genre.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
 import '../widgets/loading_indicator.dart';
+import '../widgets/multi_select_filter_sheet.dart';
 import '../widgets/paged_media_grid.dart';
 
 /// Shared implementation behind the Movies and TV Shows bottom-nav
@@ -12,6 +13,12 @@ import '../widgets/paged_media_grid.dart';
 /// optional) over a paginated grid backed by TmdbService.discover(). Home's
 /// per-language "View more" links open this screen with that language
 /// preselected instead of duplicating the filter UI there.
+///
+/// Genre and year both support selecting more than one at a time (via the
+/// Filters bottom sheet) - matching the reference ARKPlay web app's
+/// Movies.js/TVShows.js checkbox filters, except years here actually
+/// combine correctly (see TmdbService.discover's doc comment for why the
+/// reference app's own multi-year filter doesn't).
 class TypeBrowseScreen extends StatefulWidget {
   const TypeBrowseScreen({
     super.key,
@@ -37,47 +44,35 @@ class TypeBrowseScreen extends StatefulWidget {
 class _TypeBrowseScreenState extends State<TypeBrowseScreen> {
   final _tmdb = TmdbService();
   late Future<List<Genre>> _genresFuture;
-  int? _genreId;
+  List<int> _genreIds = [];
   String? _language;
-  int? _year;
+  List<int> _years = [];
 
   @override
   void initState() {
     super.initState();
-    _genreId = widget.initialGenreId;
+    if (widget.initialGenreId != null) _genreIds = [widget.initialGenreId!];
     _language = widget.initialLanguageCode;
-    _year = widget.initialYear;
+    if (widget.initialYear != null) _years = [widget.initialYear!];
     _genresFuture = _tmdb.genres(widget.mediaType);
+  }
+
+  void _openFilters(List<Genre> genres) {
+    showMultiSelectFilterSheet(
+      context: context,
+      genres: genres,
+      selectedGenreIds: _genreIds,
+      selectedYears: _years,
+      onGenresChanged: (v) => setState(() => _genreIds = v),
+      onYearsChanged: (v) => setState(() => _years = v),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final currentYear = DateTime.now().year;
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: Center(
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int?>(
-                  value: _year,
-                  hint: const Text('Year', style: TextStyle(color: AppTheme.textSecondary)),
-                  dropdownColor: AppTheme.surfaceVariant,
-                  icon: const Icon(Icons.expand_more, color: AppTheme.textSecondary),
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
-                  items: [
-                    const DropdownMenuItem(value: null, child: Text('All Years')),
-                    for (var y = currentYear; y >= 1950; y--)
-                      DropdownMenuItem(value: y, child: Text('$y')),
-                  ],
-                  onChanged: (value) => setState(() => _year = value),
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
       body: FutureBuilder<List<Genre>>(
         future: _genresFuture,
@@ -92,19 +87,10 @@ class _TypeBrowseScreenState extends State<TypeBrowseScreen> {
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                   children: [
-                    _Chip(
-                      label: 'All Genres',
-                      selected: _genreId == null,
-                      onTap: () => setState(() => _genreId = null),
+                    FilterSheetButton(
+                      activeCount: _genreIds.length + _years.length,
+                      onTap: () => _openFilters(genres),
                     ),
-                    for (final g in genres) ...[
-                      const SizedBox(width: 8),
-                      _Chip(
-                        label: g.name,
-                        selected: g.id == _genreId,
-                        onTap: () => setState(() => _genreId = g.id),
-                      ),
-                    ],
                   ],
                 ),
               ),
@@ -133,12 +119,12 @@ class _TypeBrowseScreenState extends State<TypeBrowseScreen> {
               const SizedBox(height: 4),
               Expanded(
                 child: PagedMediaGrid(
-                  key: ValueKey('${widget.mediaType}-$_genreId-$_language-$_year'),
+                  key: ValueKey('${widget.mediaType}-$_genreIds-$_language-$_years'),
                   fetchPage: (page) => _tmdb.discover(
                     widget.mediaType,
-                    genreId: _genreId,
+                    genreIds: _genreIds.isEmpty ? null : _genreIds,
                     languageCode: _language,
-                    year: _year,
+                    years: _years.isEmpty ? null : _years,
                     page: page,
                   ),
                   onSelect: widget.onSelect,

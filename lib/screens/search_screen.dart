@@ -10,6 +10,7 @@ import '../services/recent_searches_service.dart';
 import '../services/tmdb_service.dart';
 import '../widgets/error_view.dart';
 import '../widgets/loading_indicator.dart';
+import '../widgets/multi_select_filter_sheet.dart';
 import '../widgets/paged_media_grid.dart';
 import '../widgets/media_card.dart';
 import 'person_detail_screen.dart';
@@ -63,13 +64,13 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
   Timer? _debounce;
   String _query = '';
 
-  int? _movieGenreId;
+  List<int> _movieGenreIds = [];
   String? _movieLanguage;
-  int? _movieYear;
+  List<int> _movieYears = [];
 
-  int? _tvGenreId;
+  List<int> _tvGenreIds = [];
   String? _tvLanguage;
-  int? _tvYear;
+  List<int> _tvYears = [];
   _SeasonCountFilter _seasonFilter = _SeasonCountFilter.any;
 
   late final Future<List<Genre>> _movieGenresFuture;
@@ -150,12 +151,12 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
             tmdb: _tmdb,
             query: _query,
             genresFuture: _movieGenresFuture,
-            genreId: _movieGenreId,
+            genreIds: _movieGenreIds,
             language: _movieLanguage,
-            year: _movieYear,
-            onGenreChanged: (v) => setState(() => _movieGenreId = v),
+            years: _movieYears,
+            onGenresChanged: (v) => setState(() => _movieGenreIds = v),
             onLanguageChanged: (v) => setState(() => _movieLanguage = v),
-            onYearChanged: (v) => setState(() => _movieYear = v),
+            onYearsChanged: (v) => setState(() => _movieYears = v),
             onSelect: widget.onSelect,
             recentSearches: _recentSearches,
             onSearchAgain: _searchAgain,
@@ -164,13 +165,13 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
             tmdb: _tmdb,
             query: _query,
             genresFuture: _tvGenresFuture,
-            genreId: _tvGenreId,
+            genreIds: _tvGenreIds,
             language: _tvLanguage,
-            year: _tvYear,
+            years: _tvYears,
             seasonFilter: _seasonFilter,
-            onGenreChanged: (v) => setState(() => _tvGenreId = v),
+            onGenresChanged: (v) => setState(() => _tvGenreIds = v),
             onLanguageChanged: (v) => setState(() => _tvLanguage = v),
-            onYearChanged: (v) => setState(() => _tvYear = v),
+            onYearsChanged: (v) => setState(() => _tvYears = v),
             onSeasonFilterChanged: (v) => setState(() => _seasonFilter = v),
             onSelect: widget.onSelect,
             recentSearches: _recentSearches,
@@ -357,38 +358,40 @@ class _DropdownChip<T> extends StatelessWidget {
 class _FilterBar extends StatelessWidget {
   const _FilterBar({
     required this.genres,
-    required this.genreId,
+    required this.genreIds,
     required this.language,
-    required this.year,
-    required this.onGenreChanged,
+    required this.years,
+    required this.onGenresChanged,
     required this.onLanguageChanged,
-    required this.onYearChanged,
+    required this.onYearsChanged,
   });
 
   final List<Genre> genres;
-  final int? genreId;
+  final List<int> genreIds;
   final String? language;
-  final int? year;
-  final ValueChanged<int?> onGenreChanged;
+  final List<int> years;
+  final ValueChanged<List<int>> onGenresChanged;
   final ValueChanged<String?> onLanguageChanged;
-  final ValueChanged<int?> onYearChanged;
+  final ValueChanged<List<int>> onYearsChanged;
 
   @override
   Widget build(BuildContext context) {
-    final currentYear = DateTime.now().year;
     return SizedBox(
       height: 44,
       child: ListView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         children: [
-          _DropdownChip<int?>(
-            value: genreId,
-            items: [
-              const DropdownMenuItem(value: null, child: Text('All Genres')),
-              for (final g in genres) DropdownMenuItem(value: g.id, child: Text(g.name)),
-            ],
-            onChanged: onGenreChanged,
+          FilterSheetButton(
+            activeCount: genreIds.length + years.length,
+            onTap: () => showMultiSelectFilterSheet(
+              context: context,
+              genres: genres,
+              selectedGenreIds: genreIds,
+              selectedYears: years,
+              onGenresChanged: onGenresChanged,
+              onYearsChanged: onYearsChanged,
+            ),
           ),
           const SizedBox(width: 8),
           _DropdownChip<String?>(
@@ -398,15 +401,6 @@ class _FilterBar extends StatelessWidget {
               for (final (code, label) in kLanguages) DropdownMenuItem(value: code, child: Text(label)),
             ],
             onChanged: onLanguageChanged,
-          ),
-          const SizedBox(width: 8),
-          _DropdownChip<int?>(
-            value: year,
-            items: [
-              const DropdownMenuItem(value: null, child: Text('All Years')),
-              for (var y = currentYear; y >= 1950; y--) DropdownMenuItem(value: y, child: Text('$y')),
-            ],
-            onChanged: onYearChanged,
           ),
         ],
       ),
@@ -444,12 +438,12 @@ class _MovieResults extends StatefulWidget {
     required this.tmdb,
     required this.query,
     required this.genresFuture,
-    required this.genreId,
+    required this.genreIds,
     required this.language,
-    required this.year,
-    required this.onGenreChanged,
+    required this.years,
+    required this.onGenresChanged,
     required this.onLanguageChanged,
-    required this.onYearChanged,
+    required this.onYearsChanged,
     required this.onSelect,
     required this.recentSearches,
     required this.onSearchAgain,
@@ -458,12 +452,12 @@ class _MovieResults extends StatefulWidget {
   final TmdbService tmdb;
   final String query;
   final Future<List<Genre>> genresFuture;
-  final int? genreId;
+  final List<int> genreIds;
   final String? language;
-  final int? year;
-  final ValueChanged<int?> onGenreChanged;
+  final List<int> years;
+  final ValueChanged<List<int>> onGenresChanged;
   final ValueChanged<String?> onLanguageChanged;
-  final ValueChanged<int?> onYearChanged;
+  final ValueChanged<List<int>> onYearsChanged;
   final void Function(MediaItem) onSelect;
   final RecentSearchesService recentSearches;
   final void Function(String) onSearchAgain;
@@ -496,11 +490,15 @@ class _MovieResultsState extends State<_MovieResults> {
   // already returned, client-side - TMDB's /search endpoints don't accept
   // discover-style filter params. For server-side filtered browsing across
   // every page, use the Movies tab instead (no search query needed there).
+  // Genres are AND-matched (an item must carry every selected genre, same
+  // semantics as TMDB's own with_genres) - years are OR-matched (an item
+  // only ever has one release year, so it matches if that year is any one
+  // of the selected years).
   List<MediaItem> _applyFilters(List<MediaItem> items) {
     return items.where((item) {
-      if (widget.genreId != null && !item.genreIds.contains(widget.genreId)) return false;
+      if (widget.genreIds.isNotEmpty && !widget.genreIds.every(item.genreIds.contains)) return false;
       if (widget.language != null && item.originalLanguage != widget.language) return false;
-      if (widget.year != null && item.year != '${widget.year}') return false;
+      if (widget.years.isNotEmpty && !widget.years.any((y) => item.year == '$y')) return false;
       return true;
     }).toList();
   }
@@ -513,12 +511,12 @@ class _MovieResultsState extends State<_MovieResults> {
           future: widget.genresFuture,
           builder: (context, snapshot) => _FilterBar(
             genres: snapshot.data ?? const [],
-            genreId: widget.genreId,
+            genreIds: widget.genreIds,
             language: widget.language,
-            year: widget.year,
-            onGenreChanged: widget.onGenreChanged,
+            years: widget.years,
+            onGenresChanged: widget.onGenresChanged,
             onLanguageChanged: widget.onLanguageChanged,
-            onYearChanged: widget.onYearChanged,
+            onYearsChanged: widget.onYearsChanged,
           ),
         ),
         Expanded(
@@ -534,12 +532,12 @@ class _MovieResultsState extends State<_MovieResults> {
                       // genre/language/year filters as search results) instead
                       // of an empty screen, so the tab is never a dead end.
                       child: PagedMediaGrid(
-                        key: ValueKey('movie-browse-${widget.genreId}-${widget.language}-${widget.year}'),
+                        key: ValueKey('movie-browse-${widget.genreIds}-${widget.language}-${widget.years}'),
                         fetchPage: (page) => widget.tmdb.discover(
                           MediaType.movie,
-                          genreId: widget.genreId,
+                          genreIds: widget.genreIds.isEmpty ? null : widget.genreIds,
                           languageCode: widget.language,
-                          year: widget.year,
+                          years: widget.years.isEmpty ? null : widget.years,
                           page: page,
                         ),
                         onSelect: widget.onSelect,
@@ -571,13 +569,13 @@ class _TVResults extends StatefulWidget {
     required this.tmdb,
     required this.query,
     required this.genresFuture,
-    required this.genreId,
+    required this.genreIds,
     required this.language,
-    required this.year,
+    required this.years,
     required this.seasonFilter,
-    required this.onGenreChanged,
+    required this.onGenresChanged,
     required this.onLanguageChanged,
-    required this.onYearChanged,
+    required this.onYearsChanged,
     required this.onSeasonFilterChanged,
     required this.onSelect,
     required this.recentSearches,
@@ -587,13 +585,13 @@ class _TVResults extends StatefulWidget {
   final TmdbService tmdb;
   final String query;
   final Future<List<Genre>> genresFuture;
-  final int? genreId;
+  final List<int> genreIds;
   final String? language;
-  final int? year;
+  final List<int> years;
   final _SeasonCountFilter seasonFilter;
-  final ValueChanged<int?> onGenreChanged;
+  final ValueChanged<List<int>> onGenresChanged;
   final ValueChanged<String?> onLanguageChanged;
-  final ValueChanged<int?> onYearChanged;
+  final ValueChanged<List<int>> onYearsChanged;
   final ValueChanged<_SeasonCountFilter> onSeasonFilterChanged;
   final void Function(MediaItem) onSelect;
   final RecentSearchesService recentSearches;
@@ -626,9 +624,9 @@ class _TVResultsState extends State<_TVResults> {
 
   List<MediaItem> _applyBaseFilters(List<MediaItem> items) {
     return items.where((item) {
-      if (widget.genreId != null && !item.genreIds.contains(widget.genreId)) return false;
+      if (widget.genreIds.isNotEmpty && !widget.genreIds.every(item.genreIds.contains)) return false;
       if (widget.language != null && item.originalLanguage != widget.language) return false;
-      if (widget.year != null && item.year != '${widget.year}') return false;
+      if (widget.years.isNotEmpty && !widget.years.any((y) => item.year == '$y')) return false;
       return true;
     }).toList();
   }
@@ -658,9 +656,9 @@ class _TVResultsState extends State<_TVResults> {
   Future<({List<MediaItem> items, int totalPages})> _tvBrowseFetchPage(int page) async {
     final result = await widget.tmdb.discover(
       MediaType.tv,
-      genreId: widget.genreId,
+      genreIds: widget.genreIds.isEmpty ? null : widget.genreIds,
       languageCode: widget.language,
-      year: widget.year,
+      years: widget.years.isEmpty ? null : widget.years,
       page: page,
     );
     if (widget.seasonFilter == _SeasonCountFilter.any) return result;
@@ -676,12 +674,12 @@ class _TVResultsState extends State<_TVResults> {
           future: widget.genresFuture,
           builder: (context, snapshot) => _FilterBar(
             genres: snapshot.data ?? const [],
-            genreId: widget.genreId,
+            genreIds: widget.genreIds,
             language: widget.language,
-            year: widget.year,
-            onGenreChanged: widget.onGenreChanged,
+            years: widget.years,
+            onGenresChanged: widget.onGenresChanged,
             onLanguageChanged: widget.onLanguageChanged,
-            onYearChanged: widget.onYearChanged,
+            onYearsChanged: widget.onYearsChanged,
           ),
         ),
         SizedBox(
@@ -720,7 +718,7 @@ class _TVResultsState extends State<_TVResults> {
                     Expanded(
                       child: PagedMediaGrid(
                         key: ValueKey(
-                          'tv-browse-${widget.genreId}-${widget.language}-${widget.year}-${widget.seasonFilter}',
+                          'tv-browse-${widget.genreIds}-${widget.language}-${widget.years}-${widget.seasonFilter}',
                         ),
                         fetchPage: _tvBrowseFetchPage,
                         onSelect: widget.onSelect,

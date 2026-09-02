@@ -15,7 +15,16 @@ class TmdbService {
               baseUrl: 'https://api.themoviedb.org/3',
               connectTimeout: const Duration(seconds: 10),
               receiveTimeout: const Duration(seconds: 10),
-            ));
+            )) {
+    // Home alone fires ~21 TMDB requests across a few bursts (one per
+    // browse language, on top of the trending/popular/top-rated rows), all
+    // sharing this project's public demo api_key with however many other
+    // installs of this same open-source app - a transient timeout, reset,
+    // or 429 from TMDB is expected occasionally, not a sign anything is
+    // actually broken. Retrying quietly here means one flaky request
+    // doesn't turn into a visibly empty row.
+    _dio.interceptors.add(_RetryOnTransientFailureInterceptor(_dio));
+  }
 
   final Dio _dio;
 
@@ -244,38 +253,96 @@ class TmdbService {
   /// genre+language+year filters, and the Platforms feature's OTT-provider
   /// / production-house results). Filters are additive: pass as many as
   /// apply and TMDB ANDs them together.
+  ///
+  /// `genreIds` supports true multi-select: TMDB's `with_genres` natively
+  /// accepts a comma-joined list with AND semantics (a title must match
+  /// every listed genre) - same as the reference ARKPlay web app's
+  /// Movies.js/TVShows.js.
+  ///
+  /// `years` also supports multi-select, but NOT by comma-joining - TMDB's
+  /// `primary_release_year`/`first_air_date_year` params only ever accept a
+  /// single value each; a comma-joined value is silently truncated to the
+  /// first year (verified against the live API). The reference web app
+  /// comma-joins them anyway, so its own "select multiple years" filter is
+  /// cosmetic and actually behaves as single-year. To make this genuinely
+  /// work here, more than one year fans out into one request per year and
+  /// merges the results (deduped by id, interleaved round-robin so no
+  /// single year's results dominate the front of the list).
   Future<({List<MediaItem> items, int totalPages})> discover(
     MediaType type, {
-    int? genreId,
+    List<int>? genreIds,
     String? languageCode,
     int? watchProviderId,
     int? companyId,
-    int? year,
+    List<int>? years,
     String watchRegion = 'IN',
     int page = 1,
     String sortBy = 'popularity.desc',
   }) async {
     final path = type == MediaType.movie ? '/discover/movie' : '/discover/tv';
-    final params = <String, dynamic>{
-      ..._auth,
-      'sort_by': sortBy,
-      'page': page,
-      'include_adult': false,
-    };
-    if (genreId != null) params['with_genres'] = genreId;
-    if (languageCode != null) params['with_original_language'] = languageCode;
-    if (watchProviderId != null) {
-      params['with_watch_providers'] = watchProviderId;
-      params['watch_region'] = watchRegion;
-      params['with_watch_monetization_types'] = 'flatrate';
-    }
-    if (companyId != null) params['with_companies'] = companyId;
-    if (year != null) {
-      params[type == MediaType.movie ? 'primary_release_year' : 'first_air_date_year'] = year;
+    final yearField = type == MediaType.movie ? 'primary_release_year' : 'first_air_date_year';
+
+    Map<String, dynamic> baseParams() {
+      final params = <String, dynamic>{
+        ..._auth,
+        'sort_by': sortBy,
+        'page': page,
+        'include_adult': false,
+      };
+      if (genreIds != null && genreIds.isNotEmpty) {
+        params['with_genres'] = genreIds.join(',');
+      }
+      if (languageCode != null) params['with_original_language'] = languageCode;
+      if (watchProviderId != null) {
+        params['with_watch_providers'] = watchProviderId;
+        params['watch_region'] = watchRegion;
+        params['with_watch_monetization_types'] = 'flatrate';
+      }
+      if (companyId != null) params['with_companies'] = companyId;
+      return params;
     }
 
-    final res = await _dio.get(path, queryParameters: params);
-    return (items: _mapResults(res.data, type), totalPages: _totalPages(res.data));
+    if (years == null || years.isEmpty) {
+      final res = await _dio.get(path, queryParameters: baseParams());
+      return (items: _mapResults(res.data, type), totalPages: _totalPages(res.data));
+    }
+
+    if (years.length == 1) {
+      final params = baseParams()..[yearField] = years.first;
+      final res = await _dio.get(path, queryParameters: params);
+      return (items: _mapResults(res.data, type), totalPages: _totalPages(res.data));
+    }
+
+    // Bounded to 3 concurrent requests rather than firing all of them at
+    // once - selecting many years used to burst one request per year
+    // simultaneously, sharing this project's public demo TMDB api_key with
+    // however many other installs of this app, which was tipping TMDB's
+    // rate limit and causing spurious failures.
+    final responses = await _runWithLimitedConcurrency<Response>(
+      [for (final y in years) () => _dio.get(path, queryParameters: baseParams()..[yearField] = y)],
+    );
+
+    final lists = [for (final res in responses) _mapResults(res.data, type)];
+    var maxPages = 1;
+    for (final res in responses) {
+      final pages = _totalPages(res.data);
+      if (pages > maxPages) maxPages = pages;
+    }
+
+    final seen = <int>{};
+    final merged = <MediaItem>[];
+    var longest = 0;
+    for (final list in lists) {
+      if (list.length > longest) longest = list.length;
+    }
+    for (var i = 0; i < longest; i++) {
+      for (final list in lists) {
+        if (i >= list.length) continue;
+        if (seen.add(list[i].id)) merged.add(list[i]);
+      }
+    }
+
+    return (items: merged, totalPages: maxPages);
   }
 
   List<MediaItem> _mapResults(dynamic data, MediaType type) {
@@ -359,4 +426,77 @@ class TmdbService {
 
 extension _FirstOrNull<T> on List<T> {
   T? get firstOrNull => isEmpty ? null : first;
+}
+
+/// Retries a request up to twice, with a short growing delay, when the
+/// failure looks transient - a timeout, a dropped connection, a 429 (rate
+/// limited), or a 5xx from TMDB's side. Anything else (404, malformed
+/// request, etc.) is a real error and is left alone.
+class _RetryOnTransientFailureInterceptor extends Interceptor {
+  _RetryOnTransientFailureInterceptor(this._dio);
+
+  final Dio _dio;
+
+  static const _retryDelays = [Duration(milliseconds: 400), Duration(milliseconds: 900)];
+
+  bool _isTransient(DioException err) {
+    switch (err.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+      case DioExceptionType.connectionError:
+        return true;
+      case DioExceptionType.badResponse:
+        final status = err.response?.statusCode;
+        return status == 429 || (status != null && status >= 500);
+      default:
+        return false;
+    }
+  }
+
+  @override
+  Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
+    final attempt = (err.requestOptions.extra['retryAttempt'] as int?) ?? 0;
+    if (!_isTransient(err) || attempt >= _retryDelays.length) {
+      handler.next(err);
+      return;
+    }
+
+    await Future.delayed(_retryDelays[attempt]);
+    err.requestOptions.extra['retryAttempt'] = attempt + 1;
+    try {
+      final response = await _dio.fetch<dynamic>(err.requestOptions);
+      handler.resolve(response);
+    } on DioException catch (retryError) {
+      handler.next(retryError);
+    } catch (retryError) {
+      handler.next(err);
+    }
+  }
+}
+
+/// Runs a list of tasks with at most [limit] running at once, rather than
+/// firing them all simultaneously via a plain Future.wait - same pattern
+/// HomeScreen uses for its per-language TMDB bursts, applied here to
+/// TmdbService.discover's multi-year fan-out so selecting many years
+/// doesn't hammer TMDB's shared demo api_key with one big burst of
+/// requests all at once.
+Future<List<T>> _runWithLimitedConcurrency<T>(
+  List<Future<T> Function()> tasks, {
+  int limit = 3,
+}) async {
+  final results = List<T?>.filled(tasks.length, null);
+  var nextIndex = 0;
+
+  Future<void> worker() async {
+    while (true) {
+      final i = nextIndex;
+      if (i >= tasks.length) return;
+      nextIndex += 1;
+      results[i] = await tasks[i]();
+    }
+  }
+
+  await Future.wait(List.generate(limit.clamp(1, tasks.length), (_) => worker()));
+  return results.cast<T>();
 }

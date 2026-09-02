@@ -34,11 +34,15 @@ class RecentlyWatchedService {
     await prefs.setString(_key, jsonEncode(trimmed.map(_toJson).toList()));
   }
 
-  /// Removes every entry for this title (any season/episode) - used by the
-  /// "x" button on Home's Recently Watched row.
-  Future<void> removeItem(MediaType type, int id) async {
+  /// Removes one entry - one movie, or one specific season/episode of a
+  /// show - used by the "x" button on Home's Recently Watched row. Season
+  /// and episode must match exactly (both null for a movie), so removing
+  /// one watched episode doesn't also wipe out a different episode of the
+  /// same show still sitting in the row.
+  Future<void> removeItem(MediaType type, int id, {int? season, int? episode}) async {
     final entries = await load();
-    entries.removeWhere((e) => e.item.type == type && e.item.id == id);
+    entries.removeWhere((e) =>
+        e.item.type == type && e.item.id == id && e.season == season && e.episode == episode);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, jsonEncode(entries.map(_toJson).toList()));
   }

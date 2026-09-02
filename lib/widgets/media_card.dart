@@ -6,7 +6,14 @@ import '../models/media_item.dart';
 import '../state/watchlist_provider.dart';
 
 class MediaCard extends StatelessWidget {
-  const MediaCard({super.key, required this.item, required this.onTap, this.onRemove});
+  const MediaCard({
+    super.key,
+    required this.item,
+    required this.onTap,
+    this.onRemove,
+    this.subtitle,
+    this.progress,
+  });
 
   final MediaItem item;
   final VoidCallback onTap;
@@ -15,6 +22,16 @@ class MediaCard extends StatelessWidget {
   /// used by rows where a title can be individually removed (Home's
   /// "Recently Watched" row) rather than every row that uses MediaCard.
   final VoidCallback? onRemove;
+
+  /// Overrides the release-year line below the title - used by Recently
+  /// Watched to show "S2 - E5" for a TV episode instead of the year, since
+  /// the year alone doesn't say which episode this card resumes.
+  final String? subtitle;
+
+  /// 0.0-1.0 watched fraction. When set, draws a thin progress bar along
+  /// the bottom edge of the poster (Recently Watched only - every other
+  /// row leaves this null and gets no bar).
+  final double? progress;
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +86,21 @@ class MediaCard extends StatelessWidget {
                     left: 6,
                     child: _PosterIconButton(icon: Icons.close, color: Colors.white, onTap: onRemove!),
                   ),
+                if (progress != null)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      height: 4,
+                      color: Colors.white24,
+                      alignment: Alignment.centerLeft,
+                      child: FractionallySizedBox(
+                        widthFactor: progress!.clamp(0.0, 1.0),
+                        child: Container(color: AppTheme.accent),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -79,7 +111,14 @@ class MediaCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
           ),
-          if (item.year.isNotEmpty)
+          if (subtitle != null)
+            Text(
+              subtitle!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+            )
+          else if (item.year.isNotEmpty)
             Text(
               item.year,
               style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),

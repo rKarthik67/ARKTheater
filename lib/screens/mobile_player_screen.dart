@@ -9,6 +9,8 @@ import '../models/media_item.dart';
 import '../core/theme.dart';
 import '../models/external_subtitle.dart';
 import '../services/external_subtitle_service.dart';
+import '../services/playback_position_service.dart';
+import '../services/recently_watched_service.dart';
 import '../video_providers/common.dart';
 import '../video_providers/names.dart';
 import '../video_providers/provider_loader.dart';
@@ -52,6 +54,21 @@ class MobilePlayerScreen extends StatefulWidget {
 
 class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
   BetterPlayerController? _controller;
+  final _playbackPosition = PlaybackPositionService();
+
+  // Once a title/episode is fully watched, PlaybackPositionService.save()
+  // clears its resume spot and reports it as finished - at that point it
+  // no longer belongs in "Recently Watched" either, since there's nothing
+  // left to continue.
+  void _onPositionSaved(bool finished) {
+    if (!finished) return;
+    unawaited(RecentlyWatchedService().removeItem(
+      widget.mediaType,
+      widget.tmdbId,
+      season: widget.season,
+      episode: widget.episode,
+    ));
+  }
 
   late int _providerIndex;
   late ProviderLoadResult _result;
@@ -70,6 +87,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
   // whichever provider ends up playing. Ported from flixquest's
   // ExternalSubtitleService/PlayerExternalSubtitles pattern.
   List<ExternalSubtitle> _externalSubtitles = [];
+  String? _externalSubtitlesError;
   bool _fetchedExternalSubtitles = false;
   bool _loadingExternalSubtitles = false;
 
@@ -86,8 +104,29 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
   void dispose() {
     _freezeWatchdog?.cancel();
     WakelockPlus.disable();
+    final videoValue = _controller?.videoPlayerController?.value;
+    if (videoValue != null) {
+      unawaited(_playbackPosition.save(
+        mediaType: widget.mediaType,
+        tmdbId: widget.tmdbId,
+        season: widget.season,
+        episode: widget.episode,
+        position: videoValue.position,
+        duration: videoValue.duration ?? Duration.zero,
+      ).then(_onPositionSaved));
+    }
     _controller?.dispose();
     super.dispose();
+  }
+
+  String _formatDuration(Duration d) {
+    if (d.isNegative || d == Duration.zero) return '0:00';
+    final hours = d.inHours;
+    final minutes = d.inMinutes.remainder(60);
+    final seconds = d.inSeconds.remainder(60);
+    final mm = hours > 0 ? minutes.toString().padLeft(2, '0') : minutes.toString();
+    final ss = seconds.toString().padLeft(2, '0');
+    return hours > 0 ? '$hours:$mm:$ss' : '$mm:$ss';
   }
 
   void _setupController() {
@@ -148,7 +187,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     return null;
   }
 
-  Future<void> _openCurrentResult() async {
+  Future<void> _openCurrentResult({Duration? resumeAt}) async {
     final links = _result.videoLinks ?? const [];
     if (links.isEmpty) {
       setState(() {
@@ -180,6 +219,22 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
               headers: sub.headers,
             ),
       ],
+      // better_player_plus's own default here is maxBufferMs: 6553600 -
+      // about 109 minutes of media. On these scraped sources that meant
+      // ExoPlayer would keep buffering (and holding decoded frames/samples
+      // in memory) far beyond anything actually needed for smooth
+      // playback, which - on top of largeHeap="true" already being turned
+      // on - was very likely the real driver behind the OOM crash on long
+      // playback sessions (the QC2V4l2Decoder "output buffer timedout"
+      // warnings growing over minutes, from the earlier crash log, match a
+      // buffer backlog like this). Capping it to a normal 30s window keeps
+      // memory bounded instead of just raising the ceiling further.
+      bufferingConfiguration: const BetterPlayerBufferingConfiguration(
+        minBufferMs: 15000,
+        maxBufferMs: 30000,
+        bufferForPlaybackMs: 2500,
+        bufferForPlaybackAfterRebufferMs: 5000,
+      ),
     );
 
     setState(() {
@@ -190,6 +245,28 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
 
     try {
       await _controller!.setupDataSource(dataSource);
+
+      // Resume where playback left off: either the position carried over
+      // from a provider switch (resumeAt, so switching providers mid-title
+      // doesn't throw away progress), or - on the very first load - a spot
+      // saved from a previous session for this exact title/episode.
+      final fromStorage = resumeAt == null;
+      final target = resumeAt ??
+          await _playbackPosition.load(
+            mediaType: widget.mediaType,
+            tmdbId: widget.tmdbId,
+            season: widget.season,
+            episode: widget.episode,
+          );
+      if (target != null && target > const Duration(seconds: 2)) {
+        await _controller!.seekTo(target);
+        if (fromStorage && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Resumed from ${_formatDuration(target)}')),
+          );
+        }
+      }
+
       _armFreezeWatchdog();
     } catch (error) {
       if (mounted) setState(() => _fatalError = 'Playback failed: $error');
@@ -219,8 +296,19 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
       final controller = _controller;
       if (controller == null || !mounted) return;
       final isPlaying = controller.isPlaying() ?? false;
-      final position =
-          controller.videoPlayerController?.value.position ?? Duration.zero;
+      final videoValue = controller.videoPlayerController?.value;
+      final position = videoValue?.position ?? Duration.zero;
+
+      // Saved every tick regardless of play/pause state, so pausing (or
+      // the app going to the background) doesn't lose recent progress.
+      unawaited(_playbackPosition.save(
+        mediaType: widget.mediaType,
+        tmdbId: widget.tmdbId,
+        season: widget.season,
+        episode: widget.episode,
+        position: position,
+        duration: videoValue?.duration ?? Duration.zero,
+      ).then(_onPositionSaved));
 
       if (!isPlaying) {
         // Paused/buffering on purpose - don't count this against the
@@ -245,6 +333,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
   Future<void> _switchProvider(int index) async {
     if (index == _providerIndex || _switchingProvider) return;
     final provider = widget.providers[index];
+    final resumePosition = _controller?.videoPlayerController?.value.position;
     setState(() => _switchingProvider = true);
 
     final result = widget.mediaType == MediaType.movie
@@ -276,7 +365,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
       _result = result;
       _showFrozenHint = false;
     });
-    await _openCurrentResult();
+    await _openCurrentResult(resumeAt: resumePosition);
   }
 
   void _showProviderSwitcher() {
@@ -321,8 +410,14 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
               widget.episode!,
             );
       _externalSubtitles = subs;
-    } catch (_) {
+      _externalSubtitlesError = null;
+    } catch (error) {
       _externalSubtitles = const [];
+      // Surfaced in the sheet below instead of collapsing into the same
+      // "no subtitles found" message a genuinely empty result gets - a
+      // failed search (bad/expired key, Wyzie Subs down, no network) looks
+      // very different from a title that just has no subtitles.
+      _externalSubtitlesError = error.toString();
     } finally {
       _fetchedExternalSubtitles = true;
       _loadingExternalSubtitles = false;
@@ -361,6 +456,14 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 20),
                       child: Center(child: CircularProgressIndicator(color: AppTheme.accent)),
+                    )
+                  else if (_externalSubtitlesError != null)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      child: Text(
+                        'Subtitle search failed:\n$_externalSubtitlesError',
+                        style: const TextStyle(color: Colors.orangeAccent, fontSize: 13),
+                      ),
                     )
                   else if (_externalSubtitles.isEmpty)
                     const Padding(

@@ -40,7 +40,11 @@ class ExternalSubtitleService {
 
     final response = await http.get(uri).timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) {
-      throw Exception('Wyzie Subs request failed (HTTP ${response.statusCode})');
+      // Include the response body (Wyzie returns a short JSON/text reason
+      // for 401s, etc.) so a broken key or a Wyzie-side policy change shows
+      // up as something readable instead of a bare status code.
+      final bodyPreview = response.body.length > 200 ? '${response.body.substring(0, 200)}...' : response.body;
+      throw Exception('Wyzie Subs request failed (HTTP ${response.statusCode}): $bodyPreview');
     }
 
     final decoded = jsonDecode(response.body);

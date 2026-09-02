@@ -20,10 +20,26 @@ import 'player_screen.dart';
 import 'webview_player_screen.dart';
 
 class DetailScreen extends StatefulWidget {
-  const DetailScreen({super.key, required this.item, required this.onSelectRelated});
+  const DetailScreen({
+    super.key,
+    required this.item,
+    required this.onSelectRelated,
+    this.autoPlay = false,
+    this.autoPlaySeason,
+    this.autoPlayEpisode,
+  });
 
   final MediaItem item;
   final void Function(MediaItem) onSelectRelated;
+
+  /// Set when this screen was opened from "Recently Watched" to resume
+  /// playback immediately instead of requiring another tap on Play -
+  /// PlaybackPositionService (inside the player screens) does the actual
+  /// seek-to-last-position once playback opens. autoPlaySeason/Episode are
+  /// null for a movie and set for a specific TV episode.
+  final bool autoPlay;
+  final int? autoPlaySeason;
+  final int? autoPlayEpisode;
 
   @override
   State<DetailScreen> createState() => _DetailScreenState();
@@ -55,7 +71,17 @@ class _DetailScreenState extends State<DetailScreen> {
     _future = _tmdb.details(widget.item.id, widget.item.type);
     _providersFuture = _loadProviders();
     if (widget.item.type == MediaType.tv) {
+      if (widget.autoPlay && widget.autoPlaySeason != null) {
+        _selectedSeason = widget.autoPlaySeason!;
+      }
       _loadEpisodes(_selectedSeason);
+    }
+    if (widget.autoPlay) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _play(season: widget.autoPlaySeason, episode: widget.autoPlayEpisode);
+        }
+      });
     }
   }
 

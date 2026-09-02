@@ -8,6 +8,8 @@ import '../core/theme.dart';
 import '../models/media_item.dart';
 import '../models/external_subtitle.dart';
 import '../services/external_subtitle_service.dart';
+import '../services/playback_position_service.dart';
+import '../services/recently_watched_service.dart';
 import '../video_providers/common.dart';
 import '../video_providers/names.dart';
 import '../video_providers/provider_loader.dart';
@@ -49,6 +51,21 @@ class DesktopPlayerScreen extends StatefulWidget {
 }
 
 class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
+  final _playbackPosition = PlaybackPositionService();
+
+  // Once a title/episode is fully watched, PlaybackPositionService.save()
+  // clears its resume spot and reports it as finished - at that point it
+  // no longer belongs in "Recently Watched" either, since there's nothing
+  // left to continue.
+  void _onPositionSaved(bool finished) {
+    if (!finished) return;
+    unawaited(RecentlyWatchedService().removeItem(
+      widget.mediaType,
+      widget.tmdbId,
+      season: widget.season,
+      episode: widget.episode,
+    ));
+  }
   late final Player _player;
   late final VideoController _controller;
 
@@ -69,6 +86,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
   StreamSubscription<Duration>? _durationSub;
   StreamSubscription<bool>? _playingSub;
   Duration _lastProgressPosition = Duration.zero;
+  Timer? _positionSaveTimer;
 
   // Drives the custom seek bar - the default media_kit controls are turned
   // off (see `controls: NoVideoControls` below) because their built-in
@@ -85,6 +103,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
   // flixquest's ExternalSubtitleService/PlayerExternalSubtitles. Cached at
   // this level (not per sheet-open) so reopening the sheet doesn't refetch.
   List<ExternalSubtitle> _externalSubtitles = [];
+  String? _externalSubtitlesError;
   bool _fetchedExternalSubtitles = false;
   bool _loadingExternalSubtitles = false;
 
@@ -145,10 +164,26 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
       setState(() => _playing = playing);
     });
 
+    // Saved every few seconds regardless of play/pause state, using
+    // whatever the stream listeners above last recorded into _position/
+    // _duration, so pausing (or backgrounding the window) doesn't lose
+    // recent progress.
+    _positionSaveTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!mounted) return;
+      unawaited(_playbackPosition.save(
+        mediaType: widget.mediaType,
+        tmdbId: widget.tmdbId,
+        season: widget.season,
+        episode: widget.episode,
+        position: _position,
+        duration: _duration,
+      ).then(_onPositionSaved));
+    });
+
     _loadCurrentLink();
   }
 
-  Future<void> _loadCurrentLink() async {
+  Future<void> _loadCurrentLink({Duration? resumeAt}) async {
     _stuckTimer?.cancel();
     _lastProgressPosition = Duration.zero;
     setState(() {
@@ -168,6 +203,28 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
         final first = subs.first;
         await _player.setSubtitleTrack(SubtitleTrack.uri(first.url!, title: first.language));
       }
+
+      // Resume where playback left off: either the position carried over
+      // from a provider/quality switch (resumeAt, so switching mid-title
+      // doesn't throw away progress), or - on the very first load - a spot
+      // saved from a previous session for this exact title/episode.
+      final fromStorage = resumeAt == null;
+      final target = resumeAt ??
+          await _playbackPosition.load(
+            mediaType: widget.mediaType,
+            tmdbId: widget.tmdbId,
+            season: widget.season,
+            episode: widget.episode,
+          );
+      if (target != null && target > const Duration(seconds: 2)) {
+        await _player.seek(target);
+        if (fromStorage && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Resumed from ${_formatDuration(target)}')),
+          );
+        }
+      }
+
       await _player.play();
 
       _armStuckTimer();
@@ -229,12 +286,23 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
   @override
   void dispose() {
     _stuckTimer?.cancel();
+    _positionSaveTimer?.cancel();
     _errorSub?.cancel();
     _bufferingSub?.cancel();
     _positionSub?.cancel();
     _durationSub?.cancel();
     _playingSub?.cancel();
     WakelockPlus.disable();
+    // Best-effort final save so closing right after the last periodic tick
+    // doesn't lose up to 5 seconds of progress.
+    unawaited(_playbackPosition.save(
+      mediaType: widget.mediaType,
+      tmdbId: widget.tmdbId,
+      season: widget.season,
+      episode: widget.episode,
+      position: _player.state.position,
+      duration: _player.state.duration,
+    ).then(_onPositionSaved));
     _player.dispose();
     super.dispose();
   }
@@ -259,13 +327,15 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
 
   void _switchQuality(RegularVideoLinks link) {
     if (link.url == _currentLink.url) return;
+    final resumePosition = _player.state.position;
     setState(() => _currentLink = link);
-    _loadCurrentLink();
+    _loadCurrentLink(resumeAt: resumePosition);
   }
 
   Future<void> _switchProvider(int index) async {
     if (index == _providerIndex || _switchingProvider) return;
     final provider = widget.providers[index];
+    final resumePosition = _player.state.position;
     setState(() => _switchingProvider = true);
 
     final result = widget.mediaType == MediaType.movie
@@ -297,7 +367,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
       _result = result;
       _currentLink = result.videoLinks!.first;
     });
-    _loadCurrentLink();
+    _loadCurrentLink(resumeAt: resumePosition);
   }
 
   Future<void> _setSpeed(double speed) async {
@@ -351,8 +421,14 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
               widget.episode!,
             );
       _externalSubtitles = subs;
-    } catch (_) {
+      _externalSubtitlesError = null;
+    } catch (error) {
       _externalSubtitles = const [];
+      // Surfaced in the sheet below instead of collapsing into the same
+      // "no subtitles found" message a genuinely empty result gets - a
+      // failed search (bad/expired key, Wyzie Subs down, no network) looks
+      // very different from a title that just has no subtitles.
+      _externalSubtitlesError = error.toString();
     } finally {
       _fetchedExternalSubtitles = true;
       _loadingExternalSubtitles = false;
@@ -433,15 +509,20 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                         padding: EdgeInsets.symmetric(vertical: 20),
                         child: Center(child: CircularProgressIndicator(color: AppTheme.accent)),
                       )
-                    else if (_externalSubtitles.isEmpty)
+                    else if (_externalSubtitlesError != null || _externalSubtitles.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 8),
                         child: Row(
                           children: [
-                            const Expanded(
+                            Expanded(
                               child: Text(
-                                'No external subtitles found for this title.',
-                                style: TextStyle(color: Colors.white54),
+                                _externalSubtitlesError != null
+                                    ? 'Subtitle search failed:\n$_externalSubtitlesError'
+                                    : 'No external subtitles found for this title.',
+                                style: TextStyle(
+                                  color: _externalSubtitlesError != null ? Colors.orangeAccent : Colors.white54,
+                                  fontSize: _externalSubtitlesError != null ? 13 : 14,
+                                ),
                               ),
                             ),
                             TextButton(

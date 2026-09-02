@@ -1,19 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/languages.dart';
+import '../core/responsive.dart';
 import '../models/media_item.dart';
 import '../models/recently_watched.dart';
+import '../services/playback_position_service.dart';
 import '../services/recently_watched_service.dart';
 import '../services/tmdb_service.dart';
 import '../state/watchlist_provider.dart';
 import '../widgets/error_view.dart';
 import '../widgets/hero_banner.dart';
 import '../widgets/loading_indicator.dart';
+import '../widgets/media_card.dart';
 import '../widgets/media_row.dart';
 import 'browse_screen.dart';
+import 'detail_screen.dart';
 import 'movies_screen.dart';
 import 'tvshows_screen.dart';
 import 'watchlist_screen.dart';
+
+/// Runs [tasks] with at most [concurrency] in flight at once, instead of
+/// firing all of them simultaneously like Future.wait does. Home's
+/// per-language rows used to blast all 8 languages at TMDB at the same
+/// time, twice (movies, then TV) - a burst of simultaneous connections
+/// that, combined with this project's api_key being shared across every
+/// install of this open-source app, was the likely cause of Home
+/// intermittently failing to load some rows. Capping concurrency spreads
+/// the same requests out instead of bursting them.
+Future<List<T>> _runWithLimitedConcurrency<T>(
+  List<Future<T> Function()> tasks, {
+  int concurrency = 3,
+}) async {
+  final results = List<T?>.filled(tasks.length, null);
+  var nextIndex = 0;
+
+  Future<void> worker() async {
+    while (true) {
+      final index = nextIndex++;
+      if (index >= tasks.length) return;
+      results[index] = await tasks[index]();
+    }
+  }
+
+  await Future.wait(List.generate(concurrency.clamp(1, tasks.length == 0 ? 1 : tasks.length), (_) => worker()));
+  return results.cast<T>();
+}
 
 /// How many items a Home row shows before "View more" takes over - Home is
 /// meant to be skimmed, not deeply browsed (that's what the Movies/TV Shows
@@ -31,12 +62,37 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _tmdb = TmdbService();
-  late Future<_HomeData> _future;
+  _HomeData? _data;
+  Object? _error;
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _refresh();
+  }
+
+  /// Used for both the initial load and pull-to-refresh. Keeps whatever
+  /// data is already on screen visible while a refresh is in flight -
+  /// pull-to-refresh should never flash the whole screen back to a
+  /// spinner, only the first-ever load (when there's nothing to show yet)
+  /// does that.
+  Future<void> _refresh() async {
+    try {
+      final data = await _load();
+      if (!mounted) return;
+      setState(() {
+        _data = data;
+        _error = null;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e;
+        _loading = false;
+      });
+    }
   }
 
   Future<_HomeData> _load() async {
@@ -49,11 +105,16 @@ class _HomeScreenState extends State<HomeScreen> {
     ]);
 
     // One row per language, per media type - see core/languages.dart.
-    final movieLanguageLists = await Future.wait([
-      for (final (code, _) in kLanguages) _tmdb.discoverByLanguage(MediaType.movie, code),
+    // Run with bounded concurrency rather than Future.wait-ing all 8 of
+    // these at once per media type: bursting that many simultaneous
+    // requests at TMDB, on this project's shared public demo api_key, is
+    // what was making Home intermittently fail to load rows (see
+    // _runWithLimitedConcurrency's doc comment).
+    final movieLanguageLists = await _runWithLimitedConcurrency([
+      for (final (code, _) in kLanguages) () => _tmdb.discoverByLanguage(MediaType.movie, code),
     ]);
-    final tvLanguageLists = await Future.wait([
-      for (final (code, _) in kLanguages) _tmdb.discoverByLanguage(MediaType.tv, code),
+    final tvLanguageLists = await _runWithLimitedConcurrency([
+      for (final (code, _) in kLanguages) () => _tmdb.discoverByLanguage(MediaType.tv, code),
     ]);
 
     return _HomeData(
@@ -100,21 +161,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final data = _data;
     return Scaffold(
-      body: FutureBuilder<_HomeData>(
-        future: _future,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState != ConnectionState.done) {
-            return const LoadingIndicator(label: 'Loading titles...');
+      body: Builder(
+        builder: (context) {
+          if (data == null) {
+            return _loading
+                ? const LoadingIndicator(label: 'Loading titles...')
+                : ErrorView(
+                    message: 'Could not load titles.\n$_error',
+                    onRetry: _refresh,
+                  );
           }
-          if (snapshot.hasError) {
-            return ErrorView(
-              message: 'Could not load titles.\n${snapshot.error}',
-              onRetry: () => setState(() => _future = _load()),
-            );
-          }
-          final data = snapshot.data!;
-          return ListView(
+          return RefreshIndicator(
+            onRefresh: _refresh,
+            child: ListView(
             padding: const EdgeInsets.only(bottom: 24),
             children: [
               HeroBanner(
@@ -195,6 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     onViewMore: () => _openTv(language: code),
                   ),
             ],
+            ),
           );
         },
       ),
@@ -236,7 +298,13 @@ class _RecentlyWatchedRow extends StatefulWidget {
 
 class _RecentlyWatchedRowState extends State<_RecentlyWatchedRow> {
   final _service = RecentlyWatchedService();
+  final _playbackPosition = PlaybackPositionService();
   List<RecentlyWatchedEntry> _entries = const [];
+
+  /// Keyed by RecentlyWatchedEntry.key (title+season+episode), so two
+  /// different episodes of the same show each get their own progress bar
+  /// instead of one bleeding into the other.
+  Map<String, PlaybackProgress> _progress = const {};
   bool _loaded = false;
 
   @override
@@ -247,29 +315,94 @@ class _RecentlyWatchedRowState extends State<_RecentlyWatchedRow> {
 
   Future<void> _load() async {
     final entries = await _service.load();
+    final progress = <String, PlaybackProgress>{};
+    await Future.wait(entries.map((entry) async {
+      final p = await _playbackPosition.loadProgress(
+        mediaType: entry.item.type,
+        tmdbId: entry.item.id,
+        season: entry.season,
+        episode: entry.episode,
+      );
+      if (p != null) progress[entry.key] = p;
+    }));
     if (!mounted) return;
     setState(() {
       _entries = entries;
+      _progress = progress;
       _loaded = true;
     });
   }
 
-  Future<void> _remove(MediaItem item) async {
+  Future<void> _remove(RecentlyWatchedEntry entry) async {
     // Optimistic UI update - removes instantly, persists in the background.
     setState(() {
-      _entries = _entries.where((e) => !(e.item.type == item.type && e.item.id == item.id)).toList();
+      _entries = _entries.where((e) => e.key != entry.key).toList();
     });
-    await _service.removeItem(item.type, item.id);
+    await _service.removeItem(entry.item.type, entry.item.id, season: entry.season, episode: entry.episode);
+  }
+
+  // Goes straight into playback instead of the details page - the whole
+  // point of "Recently Watched" is one tap to keep watching. DetailScreen
+  // does the actual provider-resolving/loading-state work it already has
+  // (autoPlay just fires the same _play() its own Play button does), and
+  // the player screens themselves seek to the saved position once the
+  // stream opens (see PlaybackPositionService).
+  void _resume(RecentlyWatchedEntry entry) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => DetailScreen(
+          item: entry.item,
+          onSelectRelated: widget.onItemTap,
+          autoPlay: true,
+          autoPlaySeason: entry.season,
+          autoPlayEpisode: entry.episode,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     if (!_loaded || _entries.isEmpty) return const SizedBox.shrink();
-    return MediaRow(
-      title: 'Recently Watched',
-      items: _entries.map((e) => e.item).toList(),
-      onItemTap: widget.onItemTap,
-      onItemRemove: _remove,
+    final columns = Responsive.gridColumns(context);
+    final cardWidth =
+        (1 / columns * (MediaQuery.sizeOf(context).width - 32) - 8).clamp(110, 220).toDouble();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Text('Recently Watched', style: Theme.of(context).textTheme.titleMedium),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: cardWidth * 1.5 + 44,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _entries.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final entry = _entries[index];
+                final progress = _progress[entry.key];
+                return SizedBox(
+                  width: cardWidth,
+                  child: MediaCard(
+                    item: entry.item,
+                    onTap: () => _resume(entry),
+                    onRemove: () => _remove(entry),
+                    subtitle: entry.season != null ? 'S${entry.season} - E${entry.episode}' : null,
+                    progress: progress?.fraction,
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

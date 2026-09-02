@@ -6,11 +6,20 @@ import 'error_view.dart';
 import 'loading_indicator.dart';
 import 'media_card.dart';
 
-/// Generic infinite-scroll paginated poster grid - powers every "browse
-/// deeply" surface in the app (genre grids, language grids, the Platforms
-/// feature's OTT-provider/production-house results, and every "View more"
+/// Generic paginated poster grid - powers every "browse deeply" surface in
+/// the app (genre grids, language grids, the Platforms feature's
+/// OTT-provider/production-house results, and every "View more"
 /// destination) through a single `fetchPage` callback instead of one
 /// bespoke widget per data source.
+///
+/// Loads the first 20 (one TMDB page) on open, then only fetches the next
+/// 20 when the user taps "Load more" - deliberately NOT auto-fetching on
+/// scroll. That used to be scroll-triggered, but a failed "load next page"
+/// request left the grid stuck on a permanent spinner with no way to
+/// retry (nothing re-triggered the fetch unless the user scrolled away and
+/// back). A tap-triggered load makes each fetch a single deliberate
+/// request instead of a burst, and failures get a visible error + Retry
+/// button right where the tap was, instead of failing silently.
 class PagedMediaGrid extends StatefulWidget {
   const PagedMediaGrid({
     super.key,
@@ -28,31 +37,17 @@ class PagedMediaGrid extends StatefulWidget {
 
 class _PagedMediaGridState extends State<PagedMediaGrid> {
   final _items = <MediaItem>[];
-  final _scrollController = ScrollController();
   int _page = 0;
   int _totalPages = 1;
   bool _loading = true;
   bool _loadingMore = false;
-  Object? _error;
+  Object? _initialError;
+  Object? _moreError;
 
   @override
   void initState() {
     super.initState();
-    _scrollController.addListener(_onScroll);
     _loadNextPage();
-  }
-
-  @override
-  void dispose() {
-    _scrollController.removeListener(_onScroll);
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  void _onScroll() {
-    if (!_scrollController.hasClients) return;
-    final threshold = _scrollController.position.maxScrollExtent - 600;
-    if (_scrollController.position.pixels >= threshold) _loadNextPage();
   }
 
   Future<void> _loadNextPage() async {
@@ -60,8 +55,10 @@ class _PagedMediaGridState extends State<PagedMediaGrid> {
     setState(() {
       if (_page == 0) {
         _loading = true;
+        _initialError = null;
       } else {
         _loadingMore = true;
+        _moreError = null;
       }
     });
     try {
@@ -71,11 +68,16 @@ class _PagedMediaGridState extends State<PagedMediaGrid> {
         _items.addAll(result.items);
         _page += 1;
         _totalPages = result.totalPages;
-        _error = null;
       });
     } catch (error) {
       if (!mounted) return;
-      setState(() => _error = error);
+      setState(() {
+        if (_items.isEmpty) {
+          _initialError = error;
+        } else {
+          _moreError = error;
+        }
+      });
     } finally {
       if (mounted) {
         setState(() {
@@ -89,9 +91,9 @@ class _PagedMediaGridState extends State<PagedMediaGrid> {
   @override
   Widget build(BuildContext context) {
     if (_loading) return const LoadingIndicator();
-    if (_error != null && _items.isEmpty) {
+    if (_initialError != null && _items.isEmpty) {
       return ErrorView(
-        message: 'Could not load titles.\n$_error',
+        message: 'Could not load titles.\n$_initialError',
         onRetry: () => setState(() {
           _page = 0;
           _loadNextPage();
@@ -103,23 +105,55 @@ class _PagedMediaGridState extends State<PagedMediaGrid> {
     }
 
     final columns = Responsive.gridColumns(context);
-    return GridView.builder(
-      controller: _scrollController,
-      padding: const EdgeInsets.all(16),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: columns,
-        childAspectRatio: 0.56,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 16,
-      ),
-      itemCount: _items.length + (_page < _totalPages ? columns : 0),
-      itemBuilder: (context, index) {
-        if (index >= _items.length) {
-          return const Center(child: CircularProgressIndicator(color: AppTheme.accent));
-        }
-        final item = _items[index];
-        return MediaCard(item: item, onTap: () => widget.onSelect(item));
-      },
+    final hasMore = _page < _totalPages;
+
+    return CustomScrollView(
+      slivers: [
+        SliverPadding(
+          padding: const EdgeInsets.all(16),
+          sliver: SliverGrid(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              childAspectRatio: 0.56,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 16,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final item = _items[index];
+                return MediaCard(item: item, onTap: () => widget.onSelect(item));
+              },
+              childCount: _items.length,
+            ),
+          ),
+        ),
+        if (hasMore || _loadingMore || _moreError != null)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+              child: Center(
+                child: _loadingMore
+                    ? const CircularProgressIndicator(color: AppTheme.accent)
+                    : _moreError != null
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text(
+                                'Could not load more titles.',
+                                style: TextStyle(color: AppTheme.textSecondary),
+                              ),
+                              const SizedBox(height: 8),
+                              OutlinedButton(onPressed: _loadNextPage, child: const Text('Retry')),
+                            ],
+                          )
+                        : OutlinedButton(
+                            onPressed: _loadNextPage,
+                            child: const Text('Load 20 more'),
+                          ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
