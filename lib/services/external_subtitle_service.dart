@@ -49,9 +49,22 @@ class ExternalSubtitleService {
 
     final decoded = jsonDecode(response.body);
     if (decoded is! List) return const [];
-    return decoded
+    final subtitles = decoded
         .whereType<Map>()
         .map((json) => ExternalSubtitle.fromJson(Map<String, dynamic>.from(json)))
-        .toList(growable: false);
+        .toList();
+    // English first (it's what most users want by default), ranked among
+    // itself by downloadCount - Wyzie has no quality/rating field, so
+    // downloadCount (most downloaded first) is the closest available signal
+    // for "other people found this one correct": a subtitle with a bad
+    // sync or wrong episode rarely accumulates many downloads. Every other
+    // language follows after, also ranked by downloadCount among itself.
+    int rank(ExternalSubtitle s) => s.language.toLowerCase() == 'en' ? 0 : 1;
+    subtitles.sort((a, b) {
+      final byLanguage = rank(a).compareTo(rank(b));
+      if (byLanguage != 0) return byLanguage;
+      return b.downloadCount.compareTo(a.downloadCount);
+    });
+    return subtitles;
   }
 }

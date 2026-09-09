@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../core/config.dart';
@@ -11,6 +12,10 @@ import '../models/external_subtitle.dart';
 import '../services/external_subtitle_service.dart';
 import '../services/playback_position_service.dart';
 import '../services/recently_watched_service.dart';
+import '../services/subtitle_download_history_service.dart';
+import '../services/subtitle_style_service.dart';
+import '../utils/subtitle_sync.dart';
+import '../widgets/subtitle_style_sheet.dart';
 import '../video_providers/common.dart';
 import '../video_providers/names.dart';
 import '../video_providers/provider_loader.dart';
@@ -68,6 +73,16 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
       season: widget.season,
       episode: widget.episode,
     ));
+    // Subtitles downloaded for this specific episode/movie have nothing
+    // left to be "already downloaded for" once it's finished - forget
+    // them so they stop showing the highlight (a subtitle also used by a
+    // still-unfinished episode stays tracked there).
+    unawaited(_subtitleDownloadHistory.clearForMedia(
+      mediaType: widget.mediaType,
+      tmdbId: widget.tmdbId,
+      season: widget.season,
+      episode: widget.episode,
+    ));
   }
 
   late int _providerIndex;
@@ -91,13 +106,101 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
   bool _fetchedExternalSubtitles = false;
   bool _loadingExternalSubtitles = false;
 
+  // Manual subtitle sync offset, applied to whichever subtitle was picked
+  // from the "Search subtitles" sheet below. better_player_plus has no
+  // built-in delay/offset knob (unlike mpv's `sub-delay` used on desktop),
+  // so this works by re-fetching the raw subtitle text once, keeping it
+  // around, and re-shifting+reloading it as an in-memory subtitle source
+  // every time the offset changes (see shiftSubtitleTimings). Positive =
+  // subtitles appear later, negative = earlier. Reset whenever a new video
+  // loads (see _openCurrentResult) so an offset dialed in for one title
+  // doesn't silently carry into the next.
+  double _subtitleDelaySeconds = 0.0;
+  String? _activeSubtitleRawContent;
+  String? _activeSubtitleName;
+  final _subtitleDownloadHistory = SubtitleDownloadHistoryService();
+  Set<String> _downloadedSubtitleIds = const {};
+  // The single most recently picked subtitle - gets its own distinct
+  // highlight (light yellow + "Last downloaded" label) in the picker,
+  // separate from every other past pick's plain "already tried" tint.
+  String? _lastDownloadedSubtitleId;
+
+  // User-customizable subtitle text color/background/font size - loaded
+  // BEFORE the player controller is first built (see initState) so
+  // playback always starts with the right appearance from frame one,
+  // rather than flashing default styling and then correcting itself.
+  SubtitleStyle _subtitleStyle = SubtitleStyle.defaultStyle;
+  // What's actually baked into the live BetterPlayerController right now -
+  // compared against _subtitleStyle when the appearance sheet closes, so
+  // a visit that changes nothing (or changes something and changes it
+  // back) never triggers a needless reload.
+  SubtitleStyle _appliedSubtitleStyle = SubtitleStyle.defaultStyle;
+
   @override
   void initState() {
     super.initState();
     _providerIndex = widget.initialProviderIndex;
     _result = widget.initialResult;
     WakelockPlus.enable();
+    _loadSubtitleDownloadHistory();
+    _initSubtitleStyleThenController();
+  }
+
+  Future<void> _initSubtitleStyleThenController() async {
+    _subtitleStyle = await SubtitleStyleService().load();
+    _appliedSubtitleStyle = _subtitleStyle;
+    if (!mounted) return;
     _setupController();
+  }
+
+  Future<void> _loadSubtitleDownloadHistory() async {
+    final results = await Future.wait([
+      _subtitleDownloadHistory.loadDownloadedIds(),
+      _subtitleDownloadHistory.loadLastDownloadedId(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _downloadedSubtitleIds = results[0] as Set<String>;
+      _lastDownloadedSubtitleId = results[1] as String?;
+    });
+  }
+
+  // Every swatch tap / slider move updates the preference and persists it
+  // immediately (so nothing is lost even if the sheet is swiped away
+  // without an explicit close), but does NOT touch the live player here -
+  // better_player_plus has no API to update subtitle styling on a live
+  // controller (unlike mpv's sub-color/sub-back-color properties used on
+  // desktop, which apply instantly), so actually applying it means
+  // rebuilding the whole BetterPlayerController. Doing that on every
+  // single tap - and, worse, on every tick of a dragged slider - was
+  // exactly what caused the video to restart and the audio to briefly
+  // overlap: see _reloadIfStyleChanged, which applies it once instead,
+  // only when the sheet is closed and only if something actually changed.
+  void _onSubtitleStylePreviewChanged(SubtitleStyle style) {
+    setState(() => _subtitleStyle = style);
+    unawaited(SubtitleStyleService().save(style));
+  }
+
+  Future<void> _reloadIfStyleChanged() async {
+    if (_subtitleStyle == _appliedSubtitleStyle) return;
+    final resumePosition = _controller?.videoPlayerController?.value.position;
+    // autoDispose is false on this controller (see _setupController) so a
+    // plain dispose() silently no-ops - the old controller (and its audio
+    // track) would keep running underneath the brand new one _setupController
+    // is about to create, which is what produced the "audio mixes up from
+    // the beginning while video keeps playing" symptom. forceDispose makes
+    // it actually tear down first.
+    _controller?.dispose(forceDispose: true);
+    _appliedSubtitleStyle = _subtitleStyle;
+    _setupController(resumeAt: resumePosition, preserveActiveSubtitle: true);
+  }
+
+  void _showSubtitleStyleSheet() {
+    showSubtitleStyleSheet(
+      context: context,
+      current: _subtitleStyle,
+      onChanged: _onSubtitleStylePreviewChanged,
+    ).then((_) => _reloadIfStyleChanged());
   }
 
   @override
@@ -115,7 +218,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
         duration: videoValue.duration ?? Duration.zero,
       ).then(_onPositionSaved));
     }
-    _controller?.dispose();
+    _controller?.dispose(forceDispose: true);
     super.dispose();
   }
 
@@ -129,7 +232,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     return hours > 0 ? '$hours:$mm:$ss' : '$mm:$ss';
   }
 
-  void _setupController() {
+  void _setupController({Duration? resumeAt, bool preserveActiveSubtitle = false}) {
     _controller = BetterPlayerController(
       BetterPlayerConfiguration(
         autoPlay: true,
@@ -137,6 +240,11 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
         autoDispose: false,
         allowedScreenSleep: false,
         fullScreenByDefault: false,
+        subtitlesConfiguration: BetterPlayerSubtitlesConfiguration(
+          fontSize: _subtitleStyle.fontSize,
+          fontColor: _subtitleStyle.fontColor,
+          backgroundColor: _subtitleStyle.backgroundColor,
+        ),
         controlsConfiguration: BetterPlayerControlsConfiguration(
           // Default is Colors.black87 - noticeably darker than most
           // players' tap-to-reveal overlay. Lightened to 40% opacity so
@@ -151,6 +259,11 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
               Icons.subtitles_outlined,
               'Search subtitles',
               _showExternalSubtitlesSheet,
+            ),
+            BetterPlayerOverflowMenuItem(
+              Icons.format_color_text,
+              'Subtitle appearance',
+              _showSubtitleStyleSheet,
             ),
             if (widget.providers.length > 1)
               BetterPlayerOverflowMenuItem(
@@ -175,7 +288,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
       ),
     );
     _controller!.addEventsListener(_onPlayerEvent);
-    unawaited(_openCurrentResult());
+    unawaited(_openCurrentResult(resumeAt: resumeAt, preserveActiveSubtitle: preserveActiveSubtitle));
   }
 
   BetterPlayerVideoFormat? _inferFormat(RegularVideoLinks link) {
@@ -187,7 +300,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     return null;
   }
 
-  Future<void> _openCurrentResult({Duration? resumeAt}) async {
+  Future<void> _openCurrentResult({Duration? resumeAt, bool preserveActiveSubtitle = false}) async {
     final links = _result.videoLinks ?? const [];
     if (links.isEmpty) {
       setState(() {
@@ -237,6 +350,21 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
       ),
     );
 
+    // A new data source is loading (fresh title, or a provider/quality
+    // switch) - any manually-dialed subtitle sync offset was for the
+    // previous subtitle file and shouldn't silently carry over. Exception:
+    // a reload triggered by _reloadIfStyleChanged (changing subtitle
+    // color/background/font size) is still the SAME title/episode with
+    // the SAME externally-picked subtitle still active - wiping it there
+    // meant every appearance change silently dropped whatever subtitle
+    // you'd searched for and picked, forcing you to search and pick it
+    // again. preserveActiveSubtitle keeps it instead.
+    if (!preserveActiveSubtitle) {
+      _subtitleDelaySeconds = 0.0;
+      _activeSubtitleRawContent = null;
+      _activeSubtitleName = null;
+    }
+
     setState(() {
       _loading = true;
       _fatalError = null;
@@ -245,6 +373,14 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
 
     try {
       await _controller!.setupDataSource(dataSource);
+
+      // The freshly-built controller above only knows about the
+      // provider's own embedded subtitle tracks (dataSource.subtitles) -
+      // if an externally-picked (Wyzie) subtitle was active before this
+      // reload, put it back now exactly as it was, offset included.
+      if (preserveActiveSubtitle && _activeSubtitleRawContent != null) {
+        _reapplySubtitleWithOffset();
+      }
 
       // Resume where playback left off: either the position carried over
       // from a provider switch (resumeAt, so switching providers mid-title
@@ -400,6 +536,76 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     );
   }
 
+  // Re-renders whatever subtitle is currently active (fetched raw text
+  // held in _activeSubtitleRawContent) shifted by the current sync offset,
+  // as an in-memory BetterPlayer subtitle source - better_player_plus has
+  // no native delay/offset knob, so the shift has to happen on the text
+  // itself rather than as a player property (contrast with the desktop
+  // player's mpv sub-delay, which does support that natively).
+  void _reapplySubtitleWithOffset() {
+    final raw = _activeSubtitleRawContent;
+    if (raw == null) return;
+    _controller?.setupSubtitleSource(
+      BetterPlayerSubtitlesSource(
+        type: BetterPlayerSubtitlesSourceType.memory,
+        content: shiftSubtitleTimings(raw, _subtitleDelaySeconds),
+        name: _activeSubtitleName ?? 'Subtitle',
+      ),
+    );
+  }
+
+  // +/- 0.25s per tap. Only meaningful once a subtitle picked from the
+  // "Search subtitles" list has been fetched (see _applyExternalSubtitle) -
+  // there's nothing to shift before that.
+  void _adjustSubtitleDelay(double deltaSeconds, void Function(void Function()) setSheetState) {
+    if (_activeSubtitleRawContent == null) return;
+    _subtitleDelaySeconds = (_subtitleDelaySeconds + deltaSeconds).clamp(-30.0, 30.0);
+    _reapplySubtitleWithOffset();
+    setSheetState(() {});
+  }
+
+  // Fetches the chosen Wyzie subtitle's raw text once (instead of just
+  // pointing BetterPlayer at the URL directly) so it can be re-shifted
+  // in-place whenever the user nudges the sync offset afterwards. Falls
+  // back to loading it as a plain network source if the fetch fails, so a
+  // transient network hiccup here doesn't leave the user with no subtitle
+  // at all - it just won't be sync-adjustable in that case.
+  Future<void> _applyExternalSubtitle(ExternalSubtitle sub) async {
+    _subtitleDelaySeconds = 0.0;
+    _activeSubtitleRawContent = null;
+    _activeSubtitleName = sub.displayName;
+    unawaited(_subtitleDownloadHistory.markDownloaded(
+                                mediaType: widget.mediaType,
+                                tmdbId: widget.tmdbId,
+                                season: widget.season,
+                                episode: widget.episode,
+                                subtitleId: sub.id,
+                              ));
+    if (mounted) {
+      setState(() {
+        _downloadedSubtitleIds = {..._downloadedSubtitleIds, sub.id};
+        _lastDownloadedSubtitleId = sub.id;
+      });
+    }
+    try {
+      final response = await http.get(Uri.parse(sub.url)).timeout(const Duration(seconds: 15));
+      if (response.statusCode == 200) {
+        _activeSubtitleRawContent = response.body;
+        _reapplySubtitleWithOffset();
+        return;
+      }
+    } catch (_) {
+      // Fall through to the network-source fallback below.
+    }
+    _controller?.setupSubtitleSource(
+      BetterPlayerSubtitlesSource(
+        type: BetterPlayerSubtitlesSourceType.network,
+        urls: [sub.url],
+        name: sub.displayName,
+      ),
+    );
+  }
+
   Future<void> _fetchExternalSubtitles(void Function(void Function()) setSheetState) async {
     try {
       final subs = widget.mediaType == MediaType.movie
@@ -451,6 +657,42 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('Search subtitles', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                  if (_activeSubtitleRawContent != null) ...[
+                    const SizedBox(height: 12),
+                    // Only shown once a subtitle fetched from this sheet is
+                    // active - lets the user nudge it into sync without
+                    // re-searching, the real fix for "timing doesn't quite
+                    // match the speech" (usually a fixed offset from a
+                    // slightly different release/cut, not a bad file).
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Subtitle sync', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle_outline, color: Colors.white70, size: 20),
+                              tooltip: 'Subtitles earlier',
+                              onPressed: () => _adjustSubtitleDelay(-0.25, setSheetState),
+                            ),
+                            SizedBox(
+                              width: 56,
+                              child: Text(
+                                '${_subtitleDelaySeconds >= 0 ? '+' : ''}${_subtitleDelaySeconds.toStringAsFixed(2)}s',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.add_circle_outline, color: Colors.white70, size: 20),
+                              tooltip: 'Subtitles later',
+                              onPressed: () => _adjustSubtitleDelay(0.25, setSheetState),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   if (_loadingExternalSubtitles)
                     const Padding(
@@ -478,18 +720,49 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                         itemCount: _externalSubtitles.length,
                         itemBuilder: (context, index) {
                           final sub = _externalSubtitles[index];
+                          // Previously-picked subtitles get a tinted
+                          // background so it's obvious at a glance which
+                          // ones have already been tried for this or any
+                          // other title. The single most recent pick gets
+                          // its own distinct light-yellow highlight instead,
+                          // taking priority over the general tint.
+                          final isLastDownloaded =
+                              _lastDownloadedSubtitleId != null && sub.id == _lastDownloadedSubtitleId;
+                          final isDownloaded = _downloadedSubtitleIds.contains(sub.id);
+                          final highlighted = isLastDownloaded || isDownloaded;
                           return ListTile(
+                            tileColor: isLastDownloaded
+                                ? Colors.yellow.withOpacity(0.22)
+                                : isDownloaded
+                                    ? AppTheme.accent.withOpacity(0.18)
+                                    : null,
+                            shape: highlighted
+                                ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
+                                : null,
                             leading: const Icon(Icons.closed_caption_outlined, color: Colors.white70),
                             title: Text(sub.displayName, style: const TextStyle(color: Colors.white)),
-                            subtitle: Text(sub.source, style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                            onTap: () {
-                              _controller?.setupSubtitleSource(
-                                BetterPlayerSubtitlesSource(
-                                  type: BetterPlayerSubtitlesSourceType.network,
-                                  urls: [sub.url],
-                                  name: sub.displayName,
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  sub.downloadCount > 0 ? '${sub.source} - ${sub.downloadCount} downloads' : sub.source,
+                                  style: const TextStyle(color: Colors.white38, fontSize: 11),
                                 ),
-                              );
+                                if (isLastDownloaded)
+                                  const Text(
+                                    'Last downloaded',
+                                    style: TextStyle(color: Colors.yellow, fontSize: 11, fontWeight: FontWeight.bold),
+                                  ),
+                              ],
+                            ),
+                            trailing: isLastDownloaded
+                                ? const Icon(Icons.history, color: Colors.yellow, size: 18)
+                                : isDownloaded
+                                    ? const Icon(Icons.check_circle, color: AppTheme.accent, size: 18)
+                                    : null,
+                            onTap: () {
+                              unawaited(_applyExternalSubtitle(sub));
                               Navigator.pop(sheetContext);
                             },
                           );

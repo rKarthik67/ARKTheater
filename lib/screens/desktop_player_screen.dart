@@ -10,7 +10,10 @@ import '../models/external_subtitle.dart';
 import '../services/external_subtitle_service.dart';
 import '../services/playback_position_service.dart';
 import '../services/recently_watched_service.dart';
+import '../services/subtitle_download_history_service.dart';
+import '../services/subtitle_style_service.dart';
 import '../video_providers/common.dart';
+import '../widgets/subtitle_style_sheet.dart';
 import '../video_providers/names.dart';
 import '../video_providers/provider_loader.dart';
 import 'webview_player_screen.dart';
@@ -65,6 +68,16 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
       season: widget.season,
       episode: widget.episode,
     ));
+    // Subtitles downloaded for this specific episode/movie have nothing
+    // left to be "already downloaded for" once it's finished - forget
+    // them so they stop showing the highlight (a subtitle also used by a
+    // still-unfinished episode stays tracked there).
+    unawaited(_subtitleDownloadHistory.clearForMedia(
+      mediaType: widget.mediaType,
+      tmdbId: widget.tmdbId,
+      season: widget.season,
+      episode: widget.episode,
+    ));
   }
   late final Player _player;
   late final VideoController _controller;
@@ -107,12 +120,68 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
   bool _fetchedExternalSubtitles = false;
   bool _loadingExternalSubtitles = false;
 
+  // Manual subtitle sync offset (seconds) - the real fix for the common
+  // "subtitle timing doesn't quite match the speech" complaint, which is
+  // usually just a fixed global offset (the subtitle file was made for a
+  // slightly different release/cut of the video), not random per-line
+  // drift. mpv's native `sub-delay` property applies this instantly without
+  // needing to re-parse the subtitle file ourselves. Positive = subtitles
+  // appear later (delayed), negative = subtitles appear earlier (advanced) -
+  // same convention as mpv's own z/x keyboard shortcuts. Reset to 0 whenever
+  // a new video loads (see _loadCurrentLink) so an offset dialed in for one
+  // title/episode doesn't silently carry over into the next.
+  double _subtitleDelaySeconds = 0.0;
+  final _subtitleDownloadHistory = SubtitleDownloadHistoryService();
+  Set<String> _downloadedSubtitleIds = const {};
+  // The single most recently picked subtitle - gets its own distinct
+  // highlight (light yellow + "Last downloaded" label) in the picker,
+  // separate from every other past pick's plain "already tried" tint.
+  String? _lastDownloadedSubtitleId;
+
+  // User-customizable subtitle text color/background/font size. Unlike
+  // mobile, mpv/media_kit needs no controller rebuild to apply a change -
+  // SubtitleViewConfiguration is just read fresh on every build(), so this
+  // takes effect live the instant the state changes.
+  SubtitleStyle _subtitleStyle = SubtitleStyle.defaultStyle;
+
+  Future<void> _loadSubtitleDownloadHistory() async {
+    final results = await Future.wait([
+      _subtitleDownloadHistory.loadDownloadedIds(),
+      _subtitleDownloadHistory.loadLastDownloadedId(),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _downloadedSubtitleIds = results[0] as Set<String>;
+      _lastDownloadedSubtitleId = results[1] as String?;
+    });
+  }
+
+  Future<void> _loadSubtitleStyle() async {
+    final style = await SubtitleStyleService().load();
+    if (mounted) setState(() => _subtitleStyle = style);
+  }
+
+  void _onSubtitleStyleChanged(SubtitleStyle style) {
+    setState(() => _subtitleStyle = style);
+    unawaited(SubtitleStyleService().save(style));
+  }
+
+  void _showSubtitleStyleSheet() {
+    showSubtitleStyleSheet(
+      context: context,
+      current: _subtitleStyle,
+      onChanged: _onSubtitleStyleChanged,
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     _providerIndex = widget.initialProviderIndex;
     _result = widget.initialResult;
     _currentLink = _result.videoLinks!.first;
+    _loadSubtitleDownloadHistory();
+    _loadSubtitleStyle();
     _player = Player(
       configuration: const PlayerConfiguration(bufferSize: 64 * 1024 * 1024),
     );
@@ -198,6 +267,11 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
     try {
       await _player.open(Media(_currentLink.url!, httpHeaders: _currentLink.headers));
       await _player.setRate(_speed);
+      _subtitleDelaySeconds = 0.0;
+      final freshNativePlayer = _player.platform;
+      if (freshNativePlayer is NativePlayer) {
+        unawaited(freshNativePlayer.setProperty('sub-delay', '0'));
+      }
       final subs = _result.subtitleLinks ?? const [];
       if (subs.isNotEmpty) {
         final first = subs.first;
@@ -411,6 +485,19 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  // +/- 0.25s per tap, matching mpv's own default z/x keybind step size.
+  // Positive delaySeconds means the subtitle track needs to appear LATER
+  // (it's currently running ahead of the speech); negative means EARLIER.
+  void _adjustSubtitleDelay(double deltaSeconds, void Function(void Function()) setSheetState) {
+    final next = (_subtitleDelaySeconds + deltaSeconds).clamp(-30.0, 30.0);
+    _subtitleDelaySeconds = next;
+    final nativePlayer = _player.platform;
+    if (nativePlayer is NativePlayer) {
+      unawaited(nativePlayer.setProperty('sub-delay', next.toStringAsFixed(2)));
+    }
+    setSheetState(() {});
+  }
+
   Future<void> _fetchExternalSubtitles(void Function(void Function()) setSheetState) async {
     try {
       final subs = widget.mediaType == MediaType.movie
@@ -468,7 +555,51 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                       'Subtitles',
                       style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
+                    // Manual sync: fixes the common "subtitle timing is
+                    // slightly off from the speech" case directly, instead
+                    // of hoping a different downloaded file happens to
+                    // match this exact release/cut.
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Subtitle sync', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.remove_circle_outline, color: Colors.white70, size: 20),
+                              tooltip: 'Subtitles earlier',
+                              onPressed: () => _adjustSubtitleDelay(-0.25, setSheetState),
+                            ),
+                            SizedBox(
+                              width: 56,
+                              child: Text(
+                                '${_subtitleDelaySeconds >= 0 ? '+' : ''}${_subtitleDelaySeconds.toStringAsFixed(2)}s',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white, fontSize: 13),
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.add_circle_outline, color: Colors.white70, size: 20),
+                              tooltip: 'Subtitles later',
+                              onPressed: () => _adjustSubtitleDelay(0.25, setSheetState),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.format_color_text, color: Colors.white70),
+                      title: const Text('Subtitle appearance', style: TextStyle(color: Colors.white)),
+                      subtitle: const Text(
+                        'Text color, background, font size',
+                        style: TextStyle(color: Colors.white38, fontSize: 11),
+                      ),
+                      onTap: _showSubtitleStyleSheet,
+                    ),
+                    const Divider(color: Colors.white24, height: 16),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: const Icon(Icons.subtitles_off, color: Colors.white70),
@@ -546,15 +677,60 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                           itemCount: _externalSubtitles.length,
                           itemBuilder: (context, index) {
                             final sub = _externalSubtitles[index];
+                            // Previously-picked subtitles get a tinted
+                            // background so it's obvious at a glance which
+                            // ones have already been tried before. The
+                            // single most recent pick gets its own distinct
+                            // light-yellow highlight instead, taking
+                            // priority over the general tint.
+                            final isLastDownloaded =
+                                _lastDownloadedSubtitleId != null && sub.id == _lastDownloadedSubtitleId;
+                            final isDownloaded = _downloadedSubtitleIds.contains(sub.id);
+                            final highlighted = isLastDownloaded || isDownloaded;
                             return ListTile(
-                              contentPadding: EdgeInsets.zero,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                              tileColor: isLastDownloaded
+                                  ? Colors.yellow.withOpacity(0.22)
+                                  : isDownloaded
+                                      ? AppTheme.accent.withOpacity(0.18)
+                                      : null,
+                              shape: highlighted
+                                  ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
+                                  : null,
                               leading: const Icon(Icons.closed_caption_outlined, color: Colors.white70),
                               title: Text(sub.displayName, style: const TextStyle(color: Colors.white)),
-                              subtitle: Text(
-                                sub.source,
-                                style: const TextStyle(color: Colors.white38, fontSize: 11),
+                              subtitle: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    sub.downloadCount > 0 ? '${sub.source} - ${sub.downloadCount} downloads' : sub.source,
+                                    style: const TextStyle(color: Colors.white38, fontSize: 11),
+                                  ),
+                                  if (isLastDownloaded)
+                                    const Text(
+                                      'Last downloaded',
+                                      style: TextStyle(color: Colors.yellow, fontSize: 11, fontWeight: FontWeight.bold),
+                                    ),
+                                ],
                               ),
+                              trailing: isLastDownloaded
+                                  ? const Icon(Icons.history, color: Colors.yellow, size: 18)
+                                  : isDownloaded
+                                      ? const Icon(Icons.check_circle, color: AppTheme.accent, size: 18)
+                                      : null,
                               onTap: () {
+                                unawaited(_subtitleDownloadHistory.markDownloaded(
+                                mediaType: widget.mediaType,
+                                tmdbId: widget.tmdbId,
+                                season: widget.season,
+                                episode: widget.episode,
+                                subtitleId: sub.id,
+                              ));
+                                setState(() {
+                                  _downloadedSubtitleIds = {..._downloadedSubtitleIds, sub.id};
+                                  _lastDownloadedSubtitleId = sub.id;
+                                });
                                 _player.setSubtitleTrack(SubtitleTrack.uri(sub.url, title: sub.displayName));
                                 Navigator.pop(sheetContext);
                               },
@@ -700,7 +876,19 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                 fit: StackFit.expand,
                 alignment: Alignment.center,
                 children: [
-                  Video(controller: _controller, fit: BoxFit.contain, controls: NoVideoControls),
+                  Video(
+                    controller: _controller,
+                    fit: BoxFit.contain,
+                    controls: NoVideoControls,
+                    subtitleViewConfiguration: SubtitleViewConfiguration(
+                      style: TextStyle(
+                        height: 1.4,
+                        fontSize: _subtitleStyle.fontSize,
+                        color: _subtitleStyle.fontColor,
+                        backgroundColor: _subtitleStyle.backgroundColor,
+                      ),
+                    ),
+                  ),
                   if (!_loading && !_buffering)
                     Positioned(
                       left: 0,

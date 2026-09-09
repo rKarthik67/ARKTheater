@@ -13,6 +13,7 @@ class ExternalSubtitle {
     required this.language,
     required this.isHearingImpaired,
     required this.source,
+    required this.downloadCount,
   });
 
   factory ExternalSubtitle.fromJson(Map<String, dynamic> json) {
@@ -25,6 +26,12 @@ class ExternalSubtitle {
       language: json['language']?.toString() ?? 'en',
       isHearingImpaired: json['isHearingImpaired'] == true,
       source: json['source']?.toString() ?? 'wyzie',
+      // Wyzie has no "rating" field, but downloadCount (how many times this
+      // exact file has been downloaded on its source platform) is the
+      // closest available proxy for "other people found this one correct" -
+      // used to sort results so the most-downloaded (and so most likely
+      // well-synced/accurate) subtitle shows first.
+      downloadCount: (json['downloadCount'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -36,6 +43,7 @@ class ExternalSubtitle {
   final String language;
   final bool isHearingImpaired;
   final String source;
+  final int downloadCount;
 
   String get displayName => isHearingImpaired ? '$display (HI)' : display;
 }
