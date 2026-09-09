@@ -27,35 +27,36 @@ const _kBackgroundPresets = <(String, Color)>[
 ];
 
 /// Bottom sheet for customizing subtitle text color, background, and font
-/// size - shared by both player screens. Every tap applies immediately via
-/// [onChanged] (same "no separate save button" pattern as the subtitle sync
-/// +/- controls), so the live preview at the top always reflects exactly
-/// what's currently in effect.
+/// size - shared by both player screens. Every control here only edits a
+/// local draft (reflected immediately in the live preview box and in which
+/// swatch shows as selected) - nothing is persisted or applied to the
+/// actual player until "Apply" is pressed, which is when [onChanged] fires
+/// once with the final chosen style. Swiping the sheet away or tapping
+/// outside it without pressing Apply discards the draft entirely.
 Future<void> showSubtitleStyleSheet({
   required BuildContext context,
   required SubtitleStyle current,
   required ValueChanged<SubtitleStyle> onChanged,
 }) {
+  // Declared here, OUTSIDE the StatefulBuilder's `builder` callback, so it
+  // survives across setSheetState rebuilds. Previously this lived INSIDE
+  // that callback (`var style = current;` as the first line of `builder:
+  // (sheetContext, setSheetState) { ... }`), which re-ran on every single
+  // rebuild and reset the draft straight back to `current` each time a
+  // swatch or the slider called setSheetState - so the sheet always
+  // *looked* like nothing was selected (or like the old value was still
+  // selected) even though the new value had already been sent onward via
+  // onChanged. That mismatch, not a rendering bug, was the actual cause.
+  var draft = current;
+
   return showModalBottomSheet<void>(
     context: context,
     backgroundColor: const Color(0xFF141414),
     isScrollControlled: true,
     builder: (sheetContext) => StatefulBuilder(
       builder: (sheetContext, setSheetState) {
-        var style = current;
-        void apply(SubtitleStyle next) {
-          style = next;
-          onChanged(next);
-          setSheetState(() {});
-        }
-        // Continuous drag ticks only update the live preview shown in this
-        // sheet - they do NOT call the outer onChanged (which persists to
-        // SharedPreferences and, on the mobile player, marks the style as
-        // "changed" so the sheet-close handler reloads the video). Only
-        // onChangeEnd below commits the value, so dragging the slider fires
-        // one persist+reload instead of dozens.
-        void previewOnly(SubtitleStyle next) {
-          style = next;
+        void update(SubtitleStyle next) {
+          draft = next;
           setSheetState(() {});
         }
 
@@ -71,7 +72,9 @@ Future<void> showSubtitleStyleSheet({
                   style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 16),
-                // Live preview, styled exactly like a real subtitle line.
+                // Live preview, styled exactly like a real subtitle line -
+                // always reflects the current draft, not what's actually
+                // applied to the player yet.
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
@@ -82,10 +85,10 @@ Future<void> showSubtitleStyleSheet({
                   child: Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                      color: style.backgroundColor,
+                      color: draft.backgroundColor,
                       child: Text(
                         'Sample subtitle text',
-                        style: TextStyle(color: style.fontColor, fontSize: style.fontSize),
+                        style: TextStyle(color: draft.fontColor, fontSize: draft.fontSize),
                       ),
                     ),
                   ),
@@ -96,20 +99,19 @@ Future<void> showSubtitleStyleSheet({
                   children: [
                     Expanded(
                       child: Slider(
-                        value: style.fontSize,
+                        value: draft.fontSize,
                         min: 12,
                         max: 40,
                         divisions: 28,
                         activeColor: AppTheme.accent,
-                        label: style.fontSize.round().toString(),
-                        onChanged: (value) => previewOnly(style.copyWith(fontSize: value)),
-                        onChangeEnd: (value) => apply(style.copyWith(fontSize: value)),
+                        label: draft.fontSize.round().toString(),
+                        onChanged: (value) => update(draft.copyWith(fontSize: value)),
                       ),
                     ),
                     SizedBox(
                       width: 32,
                       child: Text(
-                        style.fontSize.round().toString(),
+                        draft.fontSize.round().toString(),
                         textAlign: TextAlign.end,
                         style: const TextStyle(color: Colors.white),
                       ),
@@ -126,8 +128,8 @@ Future<void> showSubtitleStyleSheet({
                     for (final color in _kTextColorPresets)
                       _ColorSwatch(
                         color: color,
-                        selected: style.fontColor.value == color.value,
-                        onTap: () => apply(style.copyWith(fontColor: color)),
+                        selected: draft.fontColor.value == color.value,
+                        onTap: () => update(draft.copyWith(fontColor: color)),
                       ),
                   ],
                 ),
@@ -142,18 +144,28 @@ Future<void> showSubtitleStyleSheet({
                       _BackgroundSwatch(
                         label: label,
                         color: color,
-                        selected: style.backgroundColor.value == color.value,
-                        onTap: () => apply(style.copyWith(backgroundColor: color)),
+                        selected: draft.backgroundColor.value == color.value,
+                        onTap: () => update(draft.copyWith(backgroundColor: color)),
                       ),
                   ],
                 ),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => apply(SubtitleStyle.defaultStyle),
-                    child: const Text('Reset to default'),
-                  ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () => update(SubtitleStyle.defaultStyle),
+                      child: const Text('Reset to default'),
+                    ),
+                    const Spacer(),
+                    FilledButton(
+                      style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
+                      onPressed: () {
+                        onChanged(draft);
+                        Navigator.of(sheetContext).pop();
+                      },
+                      child: const Text('Apply'),
+                    ),
+                  ],
                 ),
               ],
             ),

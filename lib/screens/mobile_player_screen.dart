@@ -165,17 +165,16 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     });
   }
 
-  // Every swatch tap / slider move updates the preference and persists it
-  // immediately (so nothing is lost even if the sheet is swiped away
-  // without an explicit close), but does NOT touch the live player here -
+  // Fired exactly once, when the "Apply" button in the appearance sheet is
+  // pressed (see subtitle_style_sheet.dart) - every swatch tap/slider move
+  // before that only edits the sheet's own local draft, so nothing here
+  // runs until the user has actually confirmed a choice. Persists the
+  // preference immediately, but does NOT touch the live player here -
   // better_player_plus has no API to update subtitle styling on a live
   // controller (unlike mpv's sub-color/sub-back-color properties used on
   // desktop, which apply instantly), so actually applying it means
-  // rebuilding the whole BetterPlayerController. Doing that on every
-  // single tap - and, worse, on every tick of a dragged slider - was
-  // exactly what caused the video to restart and the audio to briefly
-  // overlap: see _reloadIfStyleChanged, which applies it once instead,
-  // only when the sheet is closed and only if something actually changed.
+  // rebuilding the whole BetterPlayerController: see _reloadIfStyleChanged,
+  // which does that once the sheet closes and only if something changed.
   void _onSubtitleStylePreviewChanged(SubtitleStyle style) {
     setState(() => _subtitleStyle = style);
     unawaited(SubtitleStyleService().save(style));
@@ -508,29 +507,47 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: const Color(0xFF141414),
+      // Without this, a modal bottom sheet caps itself at roughly half the
+      // screen height and its content (a plain, non-scrolling Column below)
+      // just gets clipped past that - there was no scroll view at all, so
+      // once the provider list grew past what fit in that half-screen cap
+      // (it's now 10 providers) the rest were simply unreachable, not just
+      // hard to drag to. isScrollControlled lets the sheet grow with its
+      // content instead of hard-capping it.
+      isScrollControlled: true,
       builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Text('Switch provider', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-            ),
-            for (var i = 0; i < widget.providers.length; i++)
-              ListTile(
-                leading: Icon(
-                  i == _providerIndex ? Icons.radio_button_checked : Icons.radio_button_off,
-                  color: i == _providerIndex ? AppTheme.accent : Colors.white54,
-                ),
-                title: Text(widget.providers[i].displayName, style: const TextStyle(color: Colors.white)),
-                onTap: () {
-                  Navigator.pop(sheetContext);
-                  _switchProvider(i);
-                },
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Text('Switch provider', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
               ),
-            const SizedBox(height: 12),
-          ],
+              // Bounded + scrollable (matching the "Search subtitles" sheet's
+              // pattern below) so a long provider list scrolls within the
+              // sheet instead of pushing later entries off-screen entirely.
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: widget.providers.length,
+                  itemBuilder: (context, i) => ListTile(
+                    leading: Icon(
+                      i == _providerIndex ? Icons.radio_button_checked : Icons.radio_button_off,
+                      color: i == _providerIndex ? AppTheme.accent : Colors.white54,
+                    ),
+                    title: Text(widget.providers[i].displayName, style: const TextStyle(color: Colors.white)),
+                    onTap: () {
+                      Navigator.pop(sheetContext);
+                      _switchProvider(i);
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
