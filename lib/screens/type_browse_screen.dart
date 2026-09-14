@@ -105,7 +105,7 @@ class _TypeBrowseScreenState extends State<TypeBrowseScreen> {
                       selected: _language == null,
                       onTap: () => setState(() => _language = null),
                     ),
-                    for (final (code, label) in kLanguages) ...[
+                    for (final (code, label) in kBrowseLanguages) ...[
                       const SizedBox(width: 8),
                       _Chip(
                         label: label,

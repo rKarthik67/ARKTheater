@@ -398,7 +398,7 @@ class _FilterBar extends StatelessWidget {
             value: language,
             items: [
               const DropdownMenuItem(value: null, child: Text('All Languages')),
-              for (final (code, label) in kLanguages) DropdownMenuItem(value: code, child: Text(label)),
+              for (final (code, label) in kBrowseLanguages) DropdownMenuItem(value: code, child: Text(label)),
             ],
             onChanged: onLanguageChanged,
           ),
