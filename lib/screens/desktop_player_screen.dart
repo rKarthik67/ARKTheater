@@ -974,9 +974,10 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                       ),
                     ),
                   if (_loading || _buffering)
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
+                    Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
                         const CircularProgressIndicator(color: AppTheme.accent),
                         if (_showStuckHint) ...[
                           const SizedBox(height: 20),
@@ -1017,6 +1018,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                           ),
                         ],
                       ],
+                      ),
                     ),
                 ],
               ),

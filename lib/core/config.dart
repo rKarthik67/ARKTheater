@@ -7,7 +7,7 @@ class AppConfig {
   AppConfig._();
 
   static String get tmdbApiKey =>
-      dotenv.env['TMDB_API_KEY'] ?? '5a917d25f7c40ac92b4317c99a46600d';
+      dotenv.env['TMDB_API_KEY'] ?? '';
 
   static String get scraperBaseUrl =>
       (dotenv.env['SCRAPER_BASE_URL'] ?? 'https://ark-video-scrapper.vercel.app').replaceAll(
