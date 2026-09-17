@@ -110,6 +110,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
   Duration _duration = Duration.zero;
   bool _playing = true;
   bool _seeking = false;
+  bool _confirmingSeek = false;
 
   // Subtitles fetched directly from Wyzie Subs by TMDB id/season/episode -
   // independent of whichever provider is currently playing, ported from
@@ -197,6 +198,12 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
       unawaited(nativePlayer.setProperty('demuxer-max-bytes', '96MiB'));
       unawaited(nativePlayer.setProperty('demuxer-max-back-bytes', '32MiB'));
       unawaited(nativePlayer.setProperty('network-timeout', '20'));
+      // Lets mpv seek within its own cache instead of purely trusting the
+      // CDN's handling of HTTP Range requests when you jump to a spot that
+      // isn't buffered yet - some of the scraped sources ignore or mishandle
+      // Range headers, which is what makes far seeks hang on desktop even
+      // though AVPlayer/ExoPlayer paper over the same behavior on iOS/Android.
+      unawaited(nativePlayer.setProperty('demuxer-seekable-cache', 'yes'));
       unawaited(nativePlayer.setProperty(
         'stream-lavf-o',
         'reconnect=1,reconnect_streamed=1,reconnect_on_network_error=1,reconnect_delay_max=5',
@@ -219,6 +226,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
         _lastProgressPosition = position;
         if (_showStuckHint) setState(() => _showStuckHint = false);
       }
+      debugPrint('[ARKseek] positionStream -> $position (seeking=$_seeking playing=${_player.state.playing})');
       // Don't fight the user's finger while they're actively dragging the
       // seek bar - the stream keeps emitting the pre-seek position for a
       // moment, which would otherwise snap the thumb back mid-drag.
@@ -229,6 +237,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
       setState(() => _duration = duration);
     });
     _playingSub = _player.stream.playing.listen((playing) {
+      debugPrint('[ARKseek] playingStream -> $playing at position=${_player.state.position}');
       if (!mounted) return;
       setState(() => _playing = playing);
     });
@@ -336,21 +345,81 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
   void _watchSeek(Duration target) {
     _stuckTimer?.cancel();
     var attempt = 0;
+    debugPrint('[ARKseek] start target=$target currentBefore=${_player.state.position}');
+    // Deliberately NOT pausing before seeking here - pausing this kind of
+    // network stream before a seek was found to leave mpv's demuxer/decode
+    // pipeline stalled: state.playing flips back to true after _player.play()
+    // but no further frames/position updates ever arrive. Seeking while still
+    // playing is what actually works reliably against these CDNs; we just
+    // hide the transient wrong-position blip in the UI instead (freeze the
+    // displayed position/show the spinner via _seeking/_confirmingSeek)
+    // rather than touching play/pause state at all.
+    setState(() {
+      _seeking = true;
+      _confirmingSeek = true;
+      _position = target;
+    });
+    _player.seek(target);
+
+    void finish({required bool landed}) {
+      debugPrint('[ARKseek] finish landed=$landed target=$target '
+          'finalPosition=${_player.state.position} attempts=$attempt');
+      if (!mounted) return;
+      setState(() {
+        _seeking = false;
+        if (landed) {
+          _confirmingSeek = false;
+          _showStuckHint = false;
+        } else {
+          _showStuckHint = true;
+        }
+      });
+    }
+
+    // A plain re-seek is a no-op against a connection that is already
+    // wedged - it just tells the same stuck demuxer to seek to the same
+    // place again. Confirmed by logging: the buffered-ahead duration read
+    // back bit-for-bit identical across repeated seek retries, meaning zero
+    // new bytes arrived the whole time. So retries here throw the stream
+    // away and reopen it fresh instead, which gets a brand new connection
+    // rather than banging on the same dead one.
+    Future<void> reopenAndSeek() async {
+      debugPrint('[ARKseek] reopening stream fresh for target=$target');
+      try {
+        await _player.open(
+          Media(_currentLink.url!, httpHeaders: _currentLink.headers),
+          play: true,
+        );
+        await _player.seek(target);
+      } catch (e) {
+        debugPrint('[ARKseek] reopen threw: $e');
+      }
+    }
 
     void check() {
       if (!mounted) return;
       final current = _player.state.position;
-      final onTarget = (current - target).abs() <= const Duration(seconds: 6);
+      final positionOk = (current - target).abs() <= const Duration(seconds: 6);
+      // mpv reports the seek target as the "position" the instant the seek
+      // command is accepted - well before any data for that byte range has
+      // actually arrived. So position alone is not proof the seek landed:
+      // if the CDN never delivers that range, mpv sits in $_buffering=true
+      // forever while position already (falsely) says we're there. Only
+      // count it as landed once we're on target AND actually decoding again.
+      final onTarget = positionOk && !_buffering;
+      debugPrint('[ARKseek] check attempt=$attempt target=$target current=$current '
+          'positionOk=$positionOk buffering=$_buffering onTarget=$onTarget '
+          'playing=${_player.state.playing} playerBuffer=${_player.state.buffer}');
       if (onTarget) {
-        if (_showStuckHint) setState(() => _showStuckHint = false);
+        finish(landed: true);
         return;
       }
       attempt++;
       if (attempt <= 2) {
-        _player.seek(target);
+        unawaited(reopenAndSeek());
         _stuckTimer = Timer(const Duration(seconds: 6), check);
       } else {
-        setState(() => _showStuckHint = true);
+        finish(landed: false);
       }
     }
 
@@ -452,8 +521,6 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
   void _skip(Duration delta) {
     final target = _player.state.position + delta;
     final clamped = target < Duration.zero ? Duration.zero : target;
-    _player.seek(clamped);
-    setState(() => _showStuckHint = false);
     _watchSeek(clamped);
   }
 
@@ -932,9 +999,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                                 onChanged: (v) => setState(() => _position = Duration(milliseconds: v.toInt())),
                                 onChangeEnd: (v) {
                                   final target = Duration(milliseconds: v.toInt());
-                                  _player.seek(target);
                                   _watchSeek(target);
-                                  setState(() => _seeking = false);
                                 },
                               ),
                             ),
@@ -973,7 +1038,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                         ),
                       ),
                     ),
-                  if (_loading || _buffering)
+                  if (_loading || _buffering || _confirmingSeek)
                     Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,

@@ -7,6 +7,7 @@ import '../models/media_item.dart';
 import '../video_providers/common.dart';
 import '../video_providers/names.dart';
 import 'desktop_player_screen.dart';
+import 'macos_player_screen.dart';
 import 'mobile_player_screen.dart';
 
 /// Playback entry point used everywhere else in the app (DetailScreen etc.)
@@ -16,8 +17,13 @@ import 'mobile_player_screen.dart';
 /// - Android/iOS: MobilePlayerScreen, built on better_player_plus (the same
 ///   ExoPlayer/AVPlayer engine flixquest itself uses) - see that file's doc
 ///   comment for why this matters for seek reliability on scraped sources.
-/// - Windows/macOS/Linux: DesktopPlayerScreen, built on media_kit, since
-///   better_player_plus has no desktop support at all.
+/// - macOS: MacosPlayerScreen, built on video_player's AVPlayer backend -
+///   the same underlying engine iOS uses, since media_kit/mpv was found to
+///   hang indefinitely seeking on some scraped CDNs (see that file's doc
+///   comment). better_player_plus itself has no macOS implementation, so
+///   this is a different Flutter-side wrapper reaching the same engine.
+/// - Windows/Linux: DesktopPlayerScreen, built on media_kit, since neither
+///   better_player_plus nor video_player_avfoundation cover those platforms.
 class PlayerScreen extends StatelessWidget {
   const PlayerScreen({
     super.key,
@@ -43,10 +49,24 @@ class PlayerScreen extends StatelessWidget {
   bool get _usesMobileEngine =>
       !kIsWeb && (Platform.isAndroid || Platform.isIOS);
 
+  bool get _usesMacosEngine => !kIsWeb && Platform.isMacOS;
+
   @override
   Widget build(BuildContext context) {
     if (_usesMobileEngine) {
       return MobilePlayerScreen(
+        title: title,
+        mediaType: mediaType,
+        tmdbId: tmdbId,
+        season: season,
+        episode: episode,
+        providers: providers,
+        initialProviderIndex: initialProviderIndex,
+        initialResult: initialResult,
+      );
+    }
+    if (_usesMacosEngine) {
+      return MacosPlayerScreen(
         title: title,
         mediaType: mediaType,
         tmdbId: tmdbId,

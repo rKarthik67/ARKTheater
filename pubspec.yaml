@@ -45,6 +45,12 @@ dependencies:
   media_kit: ^1.1.11
   media_kit_video: ^1.2.5
   media_kit_libs_video: ^1.0.5
+  # video_player (macOS only): its video_player_avfoundation backend talks
+  # to Apple's native AVPlayer/AVFoundation - the same engine iPad already
+  # uses via better_player_plus - used by MacosPlayerScreen specifically
+  # because media_kit/mpv was found to hang indefinitely seeking on some
+  # scraped CDNs that better_player_plus/AVPlayer handle fine.
+  video_player: ^2.9.2
 
   # In-app browser used as a fallback when native stream extraction fails
   # or a resolved link won't play (short-lived/single-use CDN tokens,
