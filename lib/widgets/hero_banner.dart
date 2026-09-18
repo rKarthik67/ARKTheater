@@ -113,7 +113,7 @@ class _HeroBannerState extends State<HeroBanner> {
                       item.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.bold),
+                      style: AppTheme.heroTitleStyle,
                     ),
                     const SizedBox(height: 8),
                     if ((item.overview ?? '').isNotEmpty)
@@ -121,7 +121,7 @@ class _HeroBannerState extends State<HeroBanner> {
                         item.overview!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                        style: AppTheme.heroOverviewStyle,
                       ),
                     const SizedBox(height: 14),
                     Row(
@@ -130,7 +130,7 @@ class _HeroBannerState extends State<HeroBanner> {
                           onPressed: () => widget.onWatchNow(item),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.accent,
-                            foregroundColor: Colors.white,
+                            foregroundColor: AppTheme.goldText,
                           ),
                           icon: const Icon(Icons.play_arrow),
                           label: const Text('Watch Now'),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import '../services/subtitle_style_service.dart';
+import 'liquid_glass.dart';
 
 /// Preset text colors - a small, deliberately limited palette (matching
 /// the common set most player apps offer) instead of a full color wheel,
@@ -51,7 +52,7 @@ Future<void> showSubtitleStyleSheet({
 
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: const Color(0xFF141414),
+    backgroundColor: Colors.transparent,
     isScrollControlled: true,
     builder: (sheetContext) => StatefulBuilder(
       builder: (sheetContext, setSheetState) {
@@ -60,7 +61,8 @@ Future<void> showSubtitleStyleSheet({
           setSheetState(() {});
         }
 
-        return SafeArea(
+        return LiquidGlassSheet(
+          child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
             child: Column(
@@ -169,6 +171,7 @@ Future<void> showSubtitleStyleSheet({
                 ),
               ],
             ),
+          ),
           ),
         );
       },

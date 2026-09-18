@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import '../models/genre.dart';
+import 'liquid_glass.dart';
 
 /// Bottom sheet shared by the Movies/TV Shows browse screen and the
 /// Search screen's browse-before-search grid, letting the user pick any
@@ -18,11 +19,8 @@ Future<void> showMultiSelectFilterSheet({
 }) {
   return showModalBottomSheet<void>(
     context: context,
-    backgroundColor: AppTheme.surface,
+    backgroundColor: Colors.transparent,
     isScrollControlled: true,
-    shape: const RoundedRectangleBorder(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-    ),
     builder: (context) => _MultiSelectFilterSheet(
       genres: genres,
       initialGenreIds: selectedGenreIds,
@@ -93,7 +91,8 @@ class _MultiSelectFilterSheetState extends State<_MultiSelectFilterSheet> {
       maxChildSize: 0.92,
       expand: false,
       builder: (context, scrollController) {
-        return SafeArea(
+        return LiquidGlassSheet(
+          child: SafeArea(
           top: false,
           child: Column(
             children: [
@@ -187,6 +186,7 @@ class _MultiSelectFilterSheetState extends State<_MultiSelectFilterSheet> {
                 ),
               ),
             ],
+          ),
           ),
         );
       },

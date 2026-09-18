@@ -47,7 +47,7 @@ class MediaRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium)),
+                Expanded(child: Text(title, style: AppTheme.sectionHeaderStyle)),
                 if (onViewMore != null)
                   TextButton(
                     onPressed: onViewMore,

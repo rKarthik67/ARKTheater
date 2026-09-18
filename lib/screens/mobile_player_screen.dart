@@ -16,6 +16,7 @@ import '../services/subtitle_download_history_service.dart';
 import '../services/subtitle_style_service.dart';
 import '../utils/subtitle_sync.dart';
 import '../widgets/subtitle_style_sheet.dart';
+import '../widgets/liquid_glass.dart';
 import '../video_providers/common.dart';
 import '../video_providers/names.dart';
 import '../video_providers/provider_loader.dart';
@@ -506,7 +507,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
   void _showProviderSwitcher() {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF141414),
+      backgroundColor: Colors.transparent,
       // Without this, a modal bottom sheet caps itself at roughly half the
       // screen height and its content (a plain, non-scrolling Column below)
       // just gets clipped past that - there was no scroll view at all, so
@@ -515,7 +516,8 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
       // hard to drag to. isScrollControlled lets the sheet grow with its
       // content instead of hard-capping it.
       isScrollControlled: true,
-      builder: (sheetContext) => SafeArea(
+      builder: (sheetContext) => LiquidGlassSheet(
+        child: SafeArea(
         child: Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: Column(
@@ -548,6 +550,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
               ),
             ],
           ),
+        ),
         ),
       ),
     );
@@ -656,7 +659,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     var sheetOpen = true;
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF141414),
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) {
@@ -666,7 +669,8 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
               if (sheetOpen) _fetchExternalSubtitles(setSheetState);
             });
           }
-          return SafeArea(
+          return LiquidGlassSheet(
+            child: SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
               child: Column(
@@ -789,6 +793,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                 ],
               ),
             ),
+            ),
           );
         },
       ),
@@ -881,9 +886,10 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
               left: 24,
               right: 24,
               bottom: 100,
-              child: Container(
+              child: LiquidGlass(
+                borderRadius: BorderRadius.circular(16),
+                opacity: 0.72,
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(10)),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -932,9 +938,10 @@ class _CircleIconButton extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(24),
       onTap: onTap,
-      child: Container(
+      child: LiquidGlass(
+        circular: true,
+        blur: 16,
         padding: const EdgeInsets.all(8),
-        decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
         child: Icon(icon, color: Colors.white, size: 22),
       ),
     );

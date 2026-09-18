@@ -4,6 +4,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:provider/provider.dart';
 import 'app.dart';
 import 'services/watchlist_service.dart';
+import 'state/settings_provider.dart';
 import 'state/watchlist_provider.dart';
 
 Future<void> main() async {
@@ -29,6 +30,7 @@ Future<void> main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => WatchlistProvider(WatchlistService())),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
       ],
       child: const ArkTheaterApp(),
     ),

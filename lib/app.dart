@@ -7,8 +7,8 @@ import 'screens/movies_screen.dart';
 import 'screens/platforms_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/splash_screen.dart';
+import 'screens/settings_screen.dart';
 import 'screens/tvshows_screen.dart';
-import 'screens/watchlist_screen.dart';
 import 'widgets/responsive_scaffold.dart';
 
 class ArkTheaterApp extends StatelessWidget {
@@ -48,14 +48,15 @@ class _RootShellState extends State<_RootShell> {
   @override
   Widget build(BuildContext context) {
     // Order matches the bottom nav / rail: Home, Movies, TV Shows,
-    // Platforms, Search, Watchlist.
+    // Platforms, Search, Settings. The watchlist used to have its own
+    // tab here; it now lives inside Settings instead (first list tile).
     final pages = [
       HomeScreen(onSelect: _openDetail),
       MoviesScreen(onSelect: _openDetail),
       TVShowsScreen(onSelect: _openDetail),
       PlatformsScreen(onSelect: _openDetail),
       SearchScreen(onSelect: _openDetail),
-      WatchlistScreen(onSelect: _openDetail),
+      SettingsScreen(onSelect: _openDetail),
     ];
 
     return ResponsiveScaffold(
@@ -68,9 +69,9 @@ class _RootShellState extends State<_RootShell> {
         NavDestinationSpec(icon: Icons.apps_outlined, selectedIcon: Icons.apps, label: 'Platforms'),
         NavDestinationSpec(icon: Icons.search_outlined, selectedIcon: Icons.search, label: 'Search'),
         NavDestinationSpec(
-          icon: Icons.bookmark_border,
-          selectedIcon: Icons.bookmark,
-          label: 'Watchlist',
+          icon: Icons.settings_outlined,
+          selectedIcon: Icons.settings,
+          label: 'Settings',
         ),
       ],
       body: IndexedStack(index: _index, children: pages),

@@ -133,7 +133,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 ),
               );
             },
-            child: Image.asset('assets/images/logo_mark.png', width: 260, fit: BoxFit.contain),
+            child: Image.asset('assets/images/splash_logo1.png', width: 260, fit: BoxFit.contain),
           ),
         ),
       ),

@@ -292,7 +292,7 @@ class _DetailScreenState extends State<DetailScreen> {
                           if (detail.item.year.isNotEmpty) _Chip(detail.item.year),
                           if (detail.runtimeMinutes != null)
                             _Chip('${detail.runtimeMinutes}m'),
-                          _Chip('★ ${detail.item.voteAverage.toStringAsFixed(1)}'),
+                          _Chip('★ ${detail.item.voteAverage.toStringAsFixed(1)}', accent: true),
                           for (final g in detail.genres.take(3)) _Chip(g),
                         ],
                       ),
@@ -388,18 +388,23 @@ class _DetailScreenState extends State<DetailScreen> {
 }
 
 class _Chip extends StatelessWidget {
-  const _Chip(this.label);
+  const _Chip(this.label, {this.accent = false});
   final String label;
+
+  /// Set for the star-rating chip so it reads as a highlight (gold pill,
+  /// bold dark-on-gold text) rather than a plain metadata tag like the
+  /// year/runtime/genre chips next to it.
+  final bool accent;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceVariant,
+        color: accent ? AppTheme.accent : AppTheme.surfaceVariant,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(label, style: const TextStyle(fontSize: 12)),
+      child: Text(label, style: accent ? AppTheme.badgeStyle : AppTheme.metaStyle),
     );
   }
 }

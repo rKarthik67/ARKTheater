@@ -1,22 +1,157 @@
 import 'package:flutter/material.dart';
 
-/// ARKTheater's visual identity: dark, cinema-like, with a single accent
-/// color so it reads consistently on phones, tablets, desktop windows, and
-/// TV-sized displays alike. Palette matches the ARK Theatre logo's violet/
-/// near-black lockup (see assets/images/splash_logo.png) rather than the
-/// app's original red.
+/// Visual identity: color palette borrowed from the C.L.A.R.A. desktop
+/// app's "dark gold" design system (D:\CLARA\apps\desktop\ui\index.html),
+/// combined with reflixmovies.vercel.app's typography and text colors -
+/// Instrument Serif for display/headline text, Space Grotesk for body/UI
+/// text, with Reflix's off-white/gray text colors sitting on top of
+/// C.L.A.R.A.'s near-black, warm-bordered surfaces and metallic gold
+/// accent. Menu-like surfaces (nav bars, sheets, player controls) layer a
+/// frosted "liquid glass" material on top - see widgets/liquid_glass.dart.
+///
+/// Both font families are bundled locally under assets/fonts/ (declared in
+/// pubspec.yaml) instead of using the google_fonts package's default
+/// runtime-fetch behavior - that package downloads each font from
+/// fonts.gstatic.com on first use and silently falls back to the system
+/// font if that fetch fails, which is exactly what a slow or ISP-blocked
+/// connection produces: no crash, no error, just plain-looking text that
+/// never explains why the "different font styles" aren't visible.
+/// Bundling the .ttf files means the fonts always render, offline or not.
 class AppTheme {
   AppTheme._();
 
-  static const Color background = Color(0xFF0A0612);
-  static const Color surface = Color(0xFF15101F);
-  static const Color surfaceVariant = Color(0xFF211A38);
-  static const Color accent = Color(0xFF8B5CF6);
-  static const Color textPrimary = Color(0xFFF5F3FA);
-  static const Color textSecondary = Color(0xFFAFA8C7);
+  static const String serifFont = 'Instrument Serif';
+  static const String sansFont = 'Space Grotesk';
+
+  // --- Surfaces (C.L.A.R.A.'s --bg/--panel/--panel-2/--panel-3) ---
+  static const Color background = Color(0xFF0C0A07);
+  static const Color surface = Color(0xFF14110C);
+  static const Color surfaceVariant = Color(0xFF1C1811);
+  static const Color surfaceTertiary = Color(0xFF241F16);
+
+  // --- Borders (C.L.A.R.A.'s --line/--line-warm) ---
+  static const Color border = Color(0xFF2E2719);
+  static const Color borderWarm = Color(0xFF3D3320);
+
+  // --- Accent: C.L.A.R.A.'s metallic gold (--gold family) ---
+  static const Color accent = Color(0xFFE0A83A);
+  static const Color accentHigh = Color(0xFFF6D68A);
+  static const Color accentLow = Color(0xFFA9761C);
+  static const Color accentDim = Color(0xFF4A3A18);
+  static const Color accentGlow = Color(0x38E0A83A);
+
+  /// Dark text C.L.A.R.A. sets on top of its gold buttons - not just
+  /// black, a warm near-black that reads better against the gold gradient.
+  static const Color goldText = Color(0xFF221703);
+
+  // --- Semantic (C.L.A.R.A.'s --ok/--warn/--err) ---
+  static const Color success = Color(0xFF8FB84A);
+  static const Color warning = Color(0xFFE0A83A);
+  static const Color error = Color(0xFFE06A52);
+
+  // --- Text (reflixmovies.vercel.app's --foreground/muted) ---
+  static const Color textPrimary = Color(0xFFF5F5F7);
+  static const Color textSecondary = Color(0xFF8B8E9A);
+
+  // --- Named text styles for different kinds of information, so a title,
+  // a synopsis, a metadata line and a badge never look interchangeable
+  // even when they sit right next to each other. ---
+
+  /// Section/row headers ("Trending Now", "Popular", genre rail titles) -
+  /// Instrument Serif with a touch of letter-spacing, distinct from the
+  /// plain Space Grotesk body copy sitting directly below it in the row.
+  static const TextStyle sectionHeaderStyle = TextStyle(
+    fontFamily: serifFont,
+    fontSize: 21,
+    fontWeight: FontWeight.w500,
+    color: textPrimary,
+    letterSpacing: 0.2,
+  );
+
+  /// Poster/media card titles - Space Grotesk, a little heavier than plain
+  /// body text so a whole grid of cards still reads as titles first.
+  static const TextStyle cardTitleStyle = TextStyle(
+    fontFamily: sansFont,
+    fontSize: 13,
+    fontWeight: FontWeight.w600,
+    color: textPrimary,
+  );
+
+  /// Small metadata under a title - year, episode tag, runtime, genre list
+  /// - always muted, always a size down from the title it sits under.
+  static const TextStyle metaStyle = TextStyle(
+    fontFamily: sansFont,
+    fontSize: 11,
+    fontWeight: FontWeight.w400,
+    color: textSecondary,
+  );
+
+  /// Hero banner / detail-screen title - the largest, most cinematic text
+  /// in the app - Instrument Serif, matching reflixmovies.vercel.app's h1.
+  static const TextStyle heroTitleStyle = TextStyle(
+    fontFamily: serifFont,
+    fontSize: 30,
+    fontWeight: FontWeight.w400,
+    color: textPrimary,
+    height: 1.05,
+  );
+
+  /// Hero banner / detail-screen synopsis - Space Grotesk, muted, sits
+  /// directly under [heroTitleStyle].
+  static const TextStyle heroOverviewStyle = TextStyle(
+    fontFamily: sansFont,
+    fontSize: 14,
+    fontWeight: FontWeight.w400,
+    color: textSecondary,
+    height: 1.35,
+  );
+
+  /// Small pill/badge text (rating chips, "NEW" tags, provider badges) -
+  /// bold with a little tracking, dark-on-gold by default so it reads on
+  /// the accent background it's usually pinned to.
+  static const TextStyle badgeStyle = TextStyle(
+    fontFamily: sansFont,
+    fontSize: 11,
+    fontWeight: FontWeight.w700,
+    color: goldText,
+    letterSpacing: 0.3,
+  );
+
+  /// C.L.A.R.A.'s `--shine` gradient - the metallic gold sheen it uses for
+  /// primary buttons and gradient-clipped brand text.
+  static const LinearGradient shine = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [accentHigh, accent, accentLow],
+    stops: [0.0, 0.42, 1.0],
+  );
+
+  /// Space Grotesk for body/UI text, Instrument Serif for display and
+  /// headline slots (including AppBar titles, which default to
+  /// `titleLarge`) - mirrors reflixmovies.vercel.app exactly, which pairs
+  /// the same two families the same way.
+  static TextTheme _textTheme(TextTheme base) {
+    final body = base.apply(fontFamily: sansFont);
+    const serif = TextStyle(fontFamily: serifFont);
+    return body.copyWith(
+      displayLarge: body.displayLarge?.merge(serif),
+      displayMedium: body.displayMedium?.merge(serif),
+      displaySmall: body.displaySmall?.merge(serif),
+      headlineLarge: body.headlineLarge?.merge(serif),
+      headlineMedium: body.headlineMedium?.merge(serif),
+      headlineSmall: body.headlineSmall?.merge(serif),
+      titleLarge: body.titleLarge?.merge(serif),
+    );
+  }
 
   static ThemeData get dark {
     final base = ThemeData.dark(useMaterial3: true);
+    final textTheme = _textTheme(base.textTheme).apply(
+      bodyColor: textPrimary,
+      displayColor: textPrimary,
+    );
+    const buttonTextStyle = TextStyle(fontFamily: sansFont, fontWeight: FontWeight.w600);
+
     return base.copyWith(
       scaffoldBackgroundColor: background,
       colorScheme: base.colorScheme.copyWith(
@@ -24,34 +159,79 @@ class AppTheme {
         secondary: accent,
         surface: surface,
         onSurface: textPrimary,
+        error: error,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
         foregroundColor: textPrimary,
+        titleTextStyle: textTheme.titleLarge?.copyWith(color: textPrimary),
       ),
       cardColor: surface,
-      textTheme: base.textTheme.apply(
-        bodyColor: textPrimary,
-        displayColor: textPrimary,
-      ),
+      dividerColor: border,
+      textTheme: textTheme,
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: accent,
-          foregroundColor: Colors.white,
+          foregroundColor: goldText,
+          textStyle: buttonTextStyle,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         ),
       ),
-      navigationRailTheme: const NavigationRailThemeData(
-        backgroundColor: surface,
-        selectedIconTheme: IconThemeData(color: accent),
-        selectedLabelTextStyle: TextStyle(color: accent),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: textPrimary,
+          side: const BorderSide(color: borderWarm),
+          textStyle: buttonTextStyle,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
+        ),
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: surface,
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: accent,
+          textStyle: buttonTextStyle,
+        ),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: surfaceVariant.withOpacity(0.92),
+        surfaceTintColor: Colors.transparent,
+        textStyle: textTheme.bodyMedium,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: border),
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: Colors.transparent,
+        modalBackgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      navigationRailTheme: NavigationRailThemeData(
+        backgroundColor: Colors.transparent,
+        selectedIconTheme: const IconThemeData(color: accent),
+        unselectedIconTheme: const IconThemeData(color: textSecondary),
+        selectedLabelTextStyle: const TextStyle(fontFamily: sansFont, color: accent, fontWeight: FontWeight.w600),
+        unselectedLabelTextStyle: const TextStyle(fontFamily: sansFont, color: textSecondary),
+      ),
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         selectedItemColor: accent,
         unselectedItemColor: textSecondary,
+        selectedLabelStyle: const TextStyle(fontFamily: sansFont, fontWeight: FontWeight.w600),
+        unselectedLabelStyle: const TextStyle(fontFamily: sansFont),
+      ),
+      sliderTheme: SliderThemeData(
+        activeTrackColor: accent,
+        thumbColor: accent,
+        inactiveTrackColor: borderWarm,
+        overlayColor: accentGlow,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: surfaceTertiary,
+        contentTextStyle: textTheme.bodyMedium?.copyWith(color: textPrimary),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );
   }

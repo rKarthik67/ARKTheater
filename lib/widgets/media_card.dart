@@ -109,19 +109,19 @@ class MediaCard extends StatelessWidget {
             item.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+            style: AppTheme.cardTitleStyle,
           ),
           if (subtitle != null)
             Text(
               subtitle!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+              style: AppTheme.metaStyle,
             )
           else if (item.year.isNotEmpty)
             Text(
               item.year,
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+              style: AppTheme.metaStyle,
             ),
         ],
       ),

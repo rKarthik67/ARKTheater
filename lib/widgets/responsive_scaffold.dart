@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/responsive.dart';
 import '../core/theme.dart';
+import 'liquid_glass.dart';
 
 class NavDestinationSpec {
   final IconData icon;
@@ -37,14 +38,23 @@ class ResponsiveScaffold extends StatelessWidget {
       return Scaffold(
         body: body,
         floatingActionButton: floatingActionButton,
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: selectedIndex,
-          onTap: onDestinationSelected,
-          type: BottomNavigationBarType.fixed,
-          items: [
-            for (final d in destinations)
-              BottomNavigationBarItem(icon: Icon(d.icon), activeIcon: Icon(d.selectedIcon), label: d.label),
-          ],
+        extendBody: true,
+        bottomNavigationBar: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: LiquidGlass(
+            borderRadius: BorderRadius.circular(28),
+            child: BottomNavigationBar(
+              currentIndex: selectedIndex,
+              onTap: onDestinationSelected,
+              type: BottomNavigationBarType.fixed,
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              items: [
+                for (final d in destinations)
+                  BottomNavigationBarItem(icon: Icon(d.icon), activeIcon: Icon(d.selectedIcon), label: d.label),
+              ],
+            ),
+          ),
         ),
       );
     }
@@ -52,25 +62,30 @@ class ResponsiveScaffold extends StatelessWidget {
     return Scaffold(
       body: Row(
         children: [
-          NavigationRail(
-            backgroundColor: AppTheme.surface,
-            selectedIndex: selectedIndex,
-            onDestinationSelected: onDestinationSelected,
-            labelType: NavigationRailLabelType.all,
-            leading: const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: FlutterLogoOrBrand(),
-            ),
-            destinations: [
-              for (final d in destinations)
-                NavigationRailDestination(
-                  icon: Icon(d.icon),
-                  selectedIcon: Icon(d.selectedIcon),
-                  label: Text(d.label),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 0, 12),
+            child: LiquidGlass(
+              borderRadius: BorderRadius.circular(24),
+              child: NavigationRail(
+                backgroundColor: Colors.transparent,
+                selectedIndex: selectedIndex,
+                onDestinationSelected: onDestinationSelected,
+                labelType: NavigationRailLabelType.all,
+                leading: const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: FlutterLogoOrBrand(),
                 ),
-            ],
+                destinations: [
+                  for (final d in destinations)
+                    NavigationRailDestination(
+                      icon: Icon(d.icon),
+                      selectedIcon: Icon(d.selectedIcon),
+                      label: Text(d.label),
+                    ),
+                ],
+              ),
+            ),
           ),
-          const VerticalDivider(width: 1, color: Colors.white12),
           Expanded(child: body),
         ],
       ),
@@ -85,18 +100,17 @@ class FlutterLogoOrBrand extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // The "A" emblem cropped out of the full ARK Theatre logo (see
-    // assets/images/splash_logo.png) - just the mark, no wordmark, since
-    // the full lockup is illegible at nav-rail-icon size.
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: Image.asset(
-        'assets/images/logo_mark.png',
-        width: 36,
-        height: 36,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) =>
-            const Icon(Icons.local_movies, color: AppTheme.accent, size: 32),
-      ),
+    // assets/images/splash_logo1.png, the full lockup used on the splash
+    // screen) - just the mark, no wordmark, since the full lockup is
+    // illegible at nav-rail-icon size. Both are true-alpha transparent PNGs
+    // so they sit on the LiquidGlass nav surface without a background box.
+    return Image.asset(
+      'assets/images/logo_mark_icon.png',
+      width: 36,
+      height: 36,
+      fit: BoxFit.contain,
+      errorBuilder: (context, error, stackTrace) =>
+          const Icon(Icons.local_movies, color: AppTheme.accent, size: 32),
     );
   }
 }

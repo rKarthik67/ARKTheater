@@ -14,6 +14,7 @@ import '../services/subtitle_download_history_service.dart';
 import '../services/subtitle_style_service.dart';
 import '../video_providers/common.dart';
 import '../widgets/subtitle_style_sheet.dart';
+import '../widgets/liquid_glass.dart';
 import '../video_providers/names.dart';
 import '../video_providers/provider_loader.dart';
 import 'webview_player_screen.dart';
@@ -600,7 +601,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
     final providerSubs = _result.subtitleLinks ?? const [];
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF141414),
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (sheetContext) {
         return StatefulBuilder(
@@ -611,7 +612,8 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                 if (sheetOpen) _fetchExternalSubtitles(setSheetState);
               });
             }
-            return SafeArea(
+            return LiquidGlassSheet(
+              child: SafeArea(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
                 child: Column(
@@ -808,6 +810,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                   ],
                 ),
               ),
+              ),
             );
           },
         );
@@ -965,13 +968,11 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                       // back-gesture/nav-bar swipe area, which is exactly
                       // what made the default controls hard to drag.
                       bottom: 28,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        child: LiquidGlass(
+                        borderRadius: BorderRadius.circular(16),
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black54,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
@@ -1036,6 +1037,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                             ),
                           ],
                         ),
+                        ),
                       ),
                     ),
                   if (_loading || _buffering || _confirmingSeek)
@@ -1046,13 +1048,11 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                         const CircularProgressIndicator(color: AppTheme.accent),
                         if (_showStuckHint) ...[
                           const SizedBox(height: 20),
-                          Container(
+                          LiquidGlass(
                             margin: const EdgeInsets.symmetric(horizontal: 32),
+                            borderRadius: BorderRadius.circular(16),
+                            opacity: 0.72,
                             padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.black87,
-                              borderRadius: BorderRadius.circular(10),
-                            ),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -1102,9 +1102,10 @@ class _SkipButton extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(28),
       onTap: onTap,
-      child: Container(
+      child: LiquidGlass(
+        circular: true,
+        blur: 16,
         padding: const EdgeInsets.all(10),
-        decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
         child: Icon(icon, color: Colors.white, size: 26),
       ),
     );
