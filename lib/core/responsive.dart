@@ -31,6 +31,27 @@ class Responsive {
     return 2;
   }
 
+  /// Vertical space the floating bottom nav bar covers, for any scrollable
+  /// that sits behind it to pad its content by.
+  ///
+  /// ResponsiveScaffold sets `extendBody: true`, so body content genuinely
+  /// runs *underneath* the glass nav bar rather than stopping above it -
+  /// that's what makes the blur have something to blur. The cost is that
+  /// the last thing in a scroll view (a "Load more" button, the final row
+  /// of a grid) ends up behind the bar, where it's both hard to read and
+  /// impossible to tap, because the bar is painted on top and eats the
+  /// touch. Padding the scroll view's bottom by this much lets that last
+  /// element scroll clear of the bar instead.
+  ///
+  /// Made up of the bar's own height (58) + its bottom margin (10) + a
+  /// little breathing room (12), plus whatever the system reserves at the
+  /// bottom (gesture bar / soft keys). Returns 0 on TV, where navigation
+  /// is a rail down the left edge and nothing overlaps the bottom.
+  static double bottomNavInset(BuildContext context) {
+    if (isTv) return 0;
+    return 80 + MediaQuery.paddingOf(context).bottom;
+  }
+
   // --- Android TV / Fire TV detection -------------------------------------
   //
   // Nav placement isn't a screen-WIDTH question the way grid density is: a

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/responsive.dart';
 import '../core/app_fonts.dart';
 import '../core/theme.dart';
 import '../models/media_item.dart';
@@ -34,7 +35,7 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(0, 8, 0, 96),
+        padding: EdgeInsets.fromLTRB(0, 8, 0, 24 + Responsive.bottomNavInset(context)),
         children: [
           // ---------------------------------------------------------------
           const _SectionLabel('Library'),

@@ -414,7 +414,7 @@ Widget _resultsGrid(BuildContext context, List<MediaItem> results, void Function
   }
   final columns = Responsive.gridColumns(context);
   return GridView.builder(
-    padding: const EdgeInsets.all(16),
+    padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + Responsive.bottomNavInset(context)),
     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
       crossAxisCount: columns,
       childAspectRatio: 0.56,
@@ -817,7 +817,7 @@ class _PeopleResultsState extends State<_PeopleResults> {
           return const Center(child: Text('No results', style: TextStyle(color: AppTheme.textSecondary)));
         }
         return ListView.builder(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: EdgeInsets.fromLTRB(0, 8, 0, 8 + Responsive.bottomNavInset(context)),
           itemCount: people.length,
           itemBuilder: (context, index) {
             final person = people[index];

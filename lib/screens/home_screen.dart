@@ -182,7 +182,9 @@ class _HomeScreenState extends State<HomeScreen> {
           return RefreshIndicator(
             onRefresh: _refresh,
             child: ListView(
-            padding: const EdgeInsets.only(bottom: 24),
+            // Clears the floating nav bar so the last row isn't stranded
+            // underneath it - see Responsive.bottomNavInset.
+            padding: EdgeInsets.only(bottom: 24 + Responsive.bottomNavInset(context)),
             children: [
               HeroBanner(
                 items: data.nowPlaying.take(5).toList(),

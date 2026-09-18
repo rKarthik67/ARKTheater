@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/responsive.dart';
 import '../core/theme.dart';
 import '../models/media_item.dart';
 import '../models/platform_filter.dart';
@@ -171,7 +172,7 @@ class _PlatformGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
+      padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + Responsive.bottomNavInset(context)),
       gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
         maxCrossAxisExtent: 150,
         mainAxisSpacing: 18,
