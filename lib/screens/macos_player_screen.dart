@@ -12,7 +12,9 @@ import '../models/media_item.dart';
 import '../models/external_subtitle.dart';
 import '../services/external_subtitle_service.dart';
 import '../services/playback_position_service.dart';
-import '../services/recently_watched_service.dart';
+import 'package:provider/provider.dart';
+
+import '../state/recently_watched_provider.dart';
 import '../services/subtitle_download_history_service.dart';
 import '../services/subtitle_style_service.dart';
 import '../video_providers/common.dart';
@@ -175,7 +177,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
 
   void _onPositionSaved(bool finished) {
     if (!finished) return;
-    unawaited(RecentlyWatchedService().removeItem(
+    unawaited(context.read<RecentlyWatchedProvider>().removeItem(
       widget.mediaType,
       widget.tmdbId,
       season: widget.season,

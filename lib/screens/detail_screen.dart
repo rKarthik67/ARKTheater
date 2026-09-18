@@ -8,7 +8,7 @@ import '../core/theme.dart';
 import '../models/media_detail.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
-import '../services/recently_watched_service.dart';
+import '../state/recently_watched_provider.dart';
 import '../state/watchlist_provider.dart';
 import '../video_providers/names.dart';
 import '../video_providers/provider_loader.dart';
@@ -172,7 +172,7 @@ class _DetailScreenState extends State<DetailScreen> {
         return;
       }
 
-      await RecentlyWatchedService().record(item: widget.item, season: season, episode: episode);
+      await context.read<RecentlyWatchedProvider>().record(item: widget.item, season: season, episode: episode);
 
       await Navigator.of(context).push(
         MaterialPageRoute(

@@ -3,41 +3,52 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../core/theme.dart';
 import '../state/settings_provider.dart';
 
-/// "Liquid Glass" surface: a blurred backdrop behind a translucent tinted
-/// gradient, a soft diagonal specular sweep, a bright hairline catching
-/// light along the top edge, a hairline border, and a soft ambient shadow
-/// (plus a faint gold glow, echoing C.L.A.R.A.'s focus-ring treatment) -
-/// used for every menu-like surface in the app: the bottom nav / side
-/// rail, filter and subtitle sheets, the provider switcher, and the
-/// player's on-screen controls.
+/// Apple-style "Liquid Glass": a neutral, barely-tinted, saturated blur
+/// behind the content, a bright hairline border, a soft directional
+/// highlight in the top-left corner, and a gentle outer drop shadow - the
+/// same visual recipe real iOS/macOS glass uses, translated from the
+/// reference CSS:
 ///
-/// The base look is tuned to sit closer to shuttletv.su's top nav pill -
-/// a much more see-through, lightly tinted glass (their nav measures out
-/// to roughly a 0.1-opacity black tint plus a 0.5px white inset hairline,
-/// with the "glass" look coming mostly from an SVG refraction filter
-/// rather than a heavy blur/tint) - than the heavier frosted panel this
-/// started as. True SVG-style chromatic-aberration refraction isn't
-/// practical to reproduce with Flutter's built-in filters, so this stays
-/// with blur + gradient + hairline, just pushed much more transparent by
-/// default.
+/// ```
+/// background: rgba(255, 255, 255, 0.03);
+/// backdrop-filter: blur(8px) saturate(1.8) brightness(1.15) contrast(1.05);
+/// box-shadow:
+///   inset 0 0 0 1px rgba(255, 255, 255, 0.15),
+///   inset 1.5px 1.5px 0 rgba(255, 255, 255, 0.5),
+///   inset 0 0 12px rgba(255, 255, 255, 0.2),
+///   0 8px 32px rgba(0, 0, 0, 0.2);
+/// ```
 ///
-/// [opacity] is each call site's own base tint strength; the actual tint
-/// applied is also scaled live by [SettingsProvider.glassOpacityScale],
-/// which the user controls from the Settings screen's "Liquid Glass
-/// Transparency" slider - so every LiquidGlass surface in the app updates
-/// together the moment that slider moves.
+/// Flutter has no native "inset shadow", so the three inset lines above
+/// are faked the same way real glass UIs on canvas/Skia typically fake
+/// them: a hairline [Border] stands in for the inset outline, a
+/// top-left-weighted highlight gradient stands in for the corner glow,
+/// and a soft white wash across the whole tint stands in for the inner
+/// glow. The outer `0 8px 32px rgba(0,0,0,0.2)` maps directly to a
+/// [BoxShadow]. `saturate()`/`brightness()`/`contrast()` on the backdrop
+/// itself (not just the glass tint) are real - done with a [ColorFilter]
+/// matrix composed onto the blur via [ImageFilter.compose], since
+/// [ColorFilter] is itself a valid [ImageFilter] in Flutter.
+///
+/// [opacity] is each call site's own base tint strength (the CSS's 0.03,
+/// scaled up slightly since our backgrounds run near-black rather than
+/// mid-tone); the actual tint applied is also scaled live by
+/// [SettingsProvider.glassOpacityScale], which the user controls from the
+/// Settings screen's "Liquid Glass Transparency" slider - so every
+/// LiquidGlass surface in the app updates together the moment that
+/// slider moves. Drag the slider all the way down for true, un-tinted
+/// glass.
 class LiquidGlass extends StatelessWidget {
   const LiquidGlass({
     super.key,
     required this.child,
     this.borderRadius = const BorderRadius.all(Radius.circular(20)),
     this.circular = false,
-    this.blur = 18,
+    this.blur = 10,
     this.tint,
-    this.opacity = 0.34,
+    this.opacity = 0.035,
     this.borderColor,
     this.padding,
     this.margin,
@@ -51,6 +62,10 @@ class LiquidGlass extends StatelessWidget {
   /// of a rounded rectangle - for small round controls like icon buttons.
   final bool circular;
   final double blur;
+
+  /// Tint color mixed into the glass. Defaults to neutral white (real
+  /// glass has no color of its own - it just lets whatever's behind it
+  /// show through, saturated and brightened).
   final Color? tint;
 
   /// Base tint opacity before the user's Settings-screen transparency
@@ -60,14 +75,14 @@ class LiquidGlass extends StatelessWidget {
   final EdgeInsetsGeometry? padding;
   final EdgeInsetsGeometry? margin;
 
-  /// Whether to paint the specular highlight sweep + bright top edge.
-  /// Left on by default; only turned off for very small/busy surfaces
-  /// where the extra highlight would just read as noise.
+  /// Whether to paint the corner highlight + hairline. Left on by
+  /// default; only turned off for very small/busy surfaces where the
+  /// extra highlight would just read as noise.
   final bool sheen;
 
   @override
   Widget build(BuildContext context) {
-    final base = tint ?? AppTheme.surface;
+    final base = tint ?? Colors.white;
 
     // Falls back to the default scale (1.0) if SettingsProvider isn't in
     // the tree yet (e.g. a widget test that doesn't wire providers) -
@@ -85,39 +100,37 @@ class LiquidGlass extends StatelessWidget {
       decoration: BoxDecoration(
         shape: circular ? BoxShape.circle : BoxShape.rectangle,
         borderRadius: circular ? null : borderRadius,
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.white.withOpacity(0.10),
-            base.withOpacity(effectiveOpacity * 0.88),
-            base.withOpacity(effectiveOpacity),
-          ],
-          stops: const [0.0, 0.42, 1.0],
-        ),
+        // A near-flat neutral wash rather than a gradient - real glass
+        // doesn't visibly darken top-to-bottom, the CSS reference is a
+        // single flat rgba() fill. The very slight lift at the top comes
+        // from the corner highlight below, not from this fill.
+        color: base.withOpacity(effectiveOpacity),
         border: Border.all(
-          color: borderColor ?? Colors.white.withOpacity(0.10),
+          // inset 0 0 0 1px rgba(255,255,255,0.15)
+          color: borderColor ?? Colors.white.withOpacity(0.15),
           width: 1,
         ),
         boxShadow: [
+          // 0 8px 32px rgba(0,0,0,0.2), lightened further - a full 0.2
+          // reads as an opaque dark band once the tint itself is this
+          // faint, defeating the point of a see-through nav bar.
           BoxShadow(
-            color: Colors.black.withOpacity(0.22),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-          BoxShadow(
-            color: AppTheme.accentGlow,
+            color: Colors.black.withOpacity(0.14),
             blurRadius: 28,
-            spreadRadius: -10,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: child,
     );
 
-    // The diagonal "liquid" sheen - a soft light band raking across the
-    // upper-left, like light grazing a curved glass surface - plus a
-    // bright rim along the very top edge where that light concentrates.
+    // Fakes the two remaining inset lines from the reference CSS, since
+    // Flutter has no inset-shadow primitive:
+    //   inset 1.5px 1.5px 0 rgba(255,255,255,0.5)  -> a tight bright spot
+    //   in the top-left corner, exactly where a real inset highlight
+    //   would catch light.
+    //   inset 0 0 12px rgba(255,255,255,0.2)       -> a soft overall
+    //   glow, brightest at the edges, faked with a radial wash.
     //
     // Wrapped in Positioned.fill so it's never the ONLY kind of child in
     // whatever Stack it ends up in: a Stack made entirely of Positioned
@@ -130,50 +143,41 @@ class LiquidGlass extends StatelessWidget {
     // sizes itself from glassBody's own finite size instead.
     final sheenOverlay = Positioned.fill(
       child: IgnorePointer(
-        child: Stack(
-          children: [
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                shape: circular ? BoxShape.circle : BoxShape.rectangle,
-                borderRadius: circular ? null : borderRadius,
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Colors.white.withOpacity(0.14),
-                    Colors.white.withOpacity(0.0),
-                  ],
-                  stops: const [0.0, 0.55],
-                ),
-              ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            shape: circular ? BoxShape.circle : BoxShape.rectangle,
+            borderRadius: circular ? null : borderRadius,
+            gradient: RadialGradient(
+              center: Alignment.topLeft,
+              radius: 1.3,
+              colors: [
+                Colors.white.withOpacity(0.5),
+                Colors.white.withOpacity(0.12),
+                Colors.white.withOpacity(0.0),
+              ],
+              stops: const [0.0, 0.18, 0.75],
             ),
           ),
-          if (!circular)
-            Positioned(
-              top: 0,
-              left: borderRadius.topLeft.x,
-              right: borderRadius.topRight.x,
-              child: Container(
-                height: 1,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.white.withOpacity(0.0),
-                      Colors.white.withOpacity(0.5),
-                      Colors.white.withOpacity(0.0),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ],
         ),
       ),
     );
 
+    // backdrop-filter: blur(8px) saturate(1.8) brightness(1.15) contrast(1.05)
+    // ColorFilter is itself a valid ImageFilter, so it can be composed
+    // directly onto the blur - this is what makes whatever scrolls
+    // behind the glass look richer/brighter through it, not just blurry,
+    // which is the biggest reason a plain BackdropFilter blur reads as
+    // "frosted plastic" instead of "glass".
+    const double saturation = 1.6;
+    const double brightness = 1.12;
+    final List<double> satMatrix = _saturationMatrix(saturation);
+    final List<double> combined = _applyBrightness(satMatrix, brightness);
+
     final content = BackdropFilter(
-      filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+      filter: ImageFilter.compose(
+        outer: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        inner: ColorFilter.matrix(combined),
+      ),
       child: sheen ? Stack(children: [glassBody, sheenOverlay]) : glassBody,
     );
 
@@ -183,6 +187,31 @@ class LiquidGlass extends StatelessWidget {
 
     return margin != null ? Padding(padding: margin!, child: clipped) : clipped;
   }
+}
+
+/// Standard luminance-preserving saturation color matrix (the same math
+/// CSS `saturate()` and Android's `ColorMatrix.setSaturation()` use).
+List<double> _saturationMatrix(double s) {
+  const lumR = 0.213, lumG = 0.715, lumB = 0.072;
+  return <double>[
+    lumR + (1 - lumR) * s, lumG - lumG * s, lumB - lumB * s, 0, 0,
+    lumR - lumR * s, lumG + (1 - lumG) * s, lumB - lumB * s, 0, 0,
+    lumR - lumR * s, lumG - lumG * s, lumB + (1 - lumB) * s, 0, 0,
+    0, 0, 0, 1, 0,
+  ];
+}
+
+/// Multiplies a color matrix's RGB rows by [b] to approximate CSS
+/// `brightness()`, folding it into the same matrix as the saturation
+/// pass so only one [ColorFilter] is needed.
+List<double> _applyBrightness(List<double> m, double b) {
+  final out = List<double>.from(m);
+  for (final row in [0, 1, 2]) {
+    for (var col = 0; col < 5; col++) {
+      out[row * 5 + col] *= b;
+    }
+  }
+  return out;
 }
 
 /// Wraps a modal bottom sheet's content in liquid glass with rounded top
@@ -200,8 +229,8 @@ class LiquidGlassSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return LiquidGlass(
       borderRadius: borderRadius ?? const BorderRadius.vertical(top: Radius.circular(24)),
-      blur: 22,
-      opacity: 0.52,
+      blur: 18,
+      opacity: 0.10,
       child: child,
     );
   }

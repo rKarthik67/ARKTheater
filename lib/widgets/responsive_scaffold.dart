@@ -40,19 +40,40 @@ class ResponsiveScaffold extends StatelessWidget {
         floatingActionButton: floatingActionButton,
         extendBody: true,
         bottomNavigationBar: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
           child: LiquidGlass(
-            borderRadius: BorderRadius.circular(28),
-            child: BottomNavigationBar(
-              currentIndex: selectedIndex,
-              onTap: onDestinationSelected,
-              type: BottomNavigationBarType.fixed,
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              items: [
-                for (final d in destinations)
-                  BottomNavigationBarItem(icon: Icon(d.icon), activeIcon: Icon(d.selectedIcon), label: d.label),
-              ],
+            borderRadius: BorderRadius.circular(26),
+            // BottomNavigationBar has no direct height property - its
+            // default (icon + always-on label + built-in vertical
+            // padding) runs close to 80px, which read as oversized
+            // against the slimmer glass pill. Constraining it with a
+            // SizedBox and trimming the icon/label sizes to match brings
+            // it down to a more native-feeling ~58px without clipping.
+            //
+            // selectedItemColor/unselectedItemColor are passed directly
+            // here (rather than through a Theme override) so both the
+            // icon AND label pick up an explicit, clearly-different
+            // color for each state - important now that the glass
+            // itself is much more transparent, so whatever's scrolling
+            // behind the bar can no longer be relied on for contrast.
+            child: SizedBox(
+              height: 58,
+              child: BottomNavigationBar(
+                currentIndex: selectedIndex,
+                onTap: onDestinationSelected,
+                type: BottomNavigationBarType.fixed,
+                backgroundColor: Colors.transparent,
+                elevation: 0,
+                iconSize: 22,
+                selectedFontSize: 11,
+                unselectedFontSize: 10,
+                selectedItemColor: AppTheme.accent,
+                unselectedItemColor: Colors.white70,
+                items: [
+                  for (final d in destinations)
+                    BottomNavigationBarItem(icon: Icon(d.icon), activeIcon: Icon(d.selectedIcon), label: d.label),
+                ],
+              ),
             ),
           ),
         ),

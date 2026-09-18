@@ -22,8 +22,13 @@ class SettingsProvider extends ChangeNotifier {
   double _glassOpacityScale = 0.55;
   double get glassOpacityScale => _glassOpacityScale;
 
-  static const double minGlassOpacityScale = 0.3;
-  static const double maxGlassOpacityScale = 1.6;
+  // 0.0 reaches true, fully transparent glass (no tint at all - only the
+  // blur/saturation and hairline border remain). The default base
+  // opacity is now small (LiquidGlass's Apple-style recipe uses ~0.07),
+  // so the max here is raised well past 1.0 to still give room to push
+  // toward a heavier frosted look if wanted.
+  static const double minGlassOpacityScale = 0.0;
+  static const double maxGlassOpacityScale = 4.0;
 
   /// `null` means "use the app's default metallic-gold accent"
   /// (AppTheme.accent) - see AppTheme.themeFor().

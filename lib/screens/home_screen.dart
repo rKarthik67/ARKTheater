@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/languages.dart';
@@ -5,8 +7,8 @@ import '../core/responsive.dart';
 import '../models/media_item.dart';
 import '../models/recently_watched.dart';
 import '../services/playback_position_service.dart';
-import '../services/recently_watched_service.dart';
 import '../services/tmdb_service.dart';
+import '../state/recently_watched_provider.dart';
 import '../state/watchlist_provider.dart';
 import '../widgets/error_view.dart';
 import '../widgets/hero_banner.dart';
@@ -80,6 +82,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _refresh() async {
     try {
       final data = await _load();
+      if (mounted) {
+        unawaited(context.read<RecentlyWatchedProvider>().reload());
+      }
       if (!mounted) return;
       setState(() {
         _data = data;
@@ -287,59 +292,16 @@ class _HomeData {
 /// Home's own Recently Watched rail - loads/mutates independently of the
 /// big _HomeData future above so deleting one entry doesn't require
 /// refetching trending/top-rated/language rows too.
-class _RecentlyWatchedRow extends StatefulWidget {
+/// Home's Recently Watched rail - reads straight from the app-wide
+/// RecentlyWatchedProvider (the same one DetailScreen's record() call and
+/// each player screen's removeItem() call write to), the same live-update
+/// pattern _WatchlistRow below already uses. Starting or finishing
+/// playback anywhere in the app updates this row immediately, with no
+/// pull-to-refresh or app restart needed.
+class _RecentlyWatchedRow extends StatelessWidget {
   const _RecentlyWatchedRow({required this.onItemTap});
 
   final void Function(MediaItem) onItemTap;
-
-  @override
-  State<_RecentlyWatchedRow> createState() => _RecentlyWatchedRowState();
-}
-
-class _RecentlyWatchedRowState extends State<_RecentlyWatchedRow> {
-  final _service = RecentlyWatchedService();
-  final _playbackPosition = PlaybackPositionService();
-  List<RecentlyWatchedEntry> _entries = const [];
-
-  /// Keyed by RecentlyWatchedEntry.key (title+season+episode), so two
-  /// different episodes of the same show each get their own progress bar
-  /// instead of one bleeding into the other.
-  Map<String, PlaybackProgress> _progress = const {};
-  bool _loaded = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final entries = await _service.load();
-    final progress = <String, PlaybackProgress>{};
-    await Future.wait(entries.map((entry) async {
-      final p = await _playbackPosition.loadProgress(
-        mediaType: entry.item.type,
-        tmdbId: entry.item.id,
-        season: entry.season,
-        episode: entry.episode,
-      );
-      if (p != null) progress[entry.key] = p;
-    }));
-    if (!mounted) return;
-    setState(() {
-      _entries = entries;
-      _progress = progress;
-      _loaded = true;
-    });
-  }
-
-  Future<void> _remove(RecentlyWatchedEntry entry) async {
-    // Optimistic UI update - removes instantly, persists in the background.
-    setState(() {
-      _entries = _entries.where((e) => e.key != entry.key).toList();
-    });
-    await _service.removeItem(entry.item.type, entry.item.id, season: entry.season, episode: entry.episode);
-  }
 
   // Goes straight into playback instead of the details page - the whole
   // point of "Recently Watched" is one tap to keep watching. DetailScreen
@@ -347,12 +309,12 @@ class _RecentlyWatchedRowState extends State<_RecentlyWatchedRow> {
   // (autoPlay just fires the same _play() its own Play button does), and
   // the player screens themselves seek to the saved position once the
   // stream opens (see PlaybackPositionService).
-  void _resume(RecentlyWatchedEntry entry) {
+  void _resume(BuildContext context, RecentlyWatchedEntry entry) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => DetailScreen(
           item: entry.item,
-          onSelectRelated: widget.onItemTap,
+          onSelectRelated: onItemTap,
           autoPlay: true,
           autoPlaySeason: entry.season,
           autoPlayEpisode: entry.episode,
@@ -363,7 +325,11 @@ class _RecentlyWatchedRowState extends State<_RecentlyWatchedRow> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_loaded || _entries.isEmpty) return const SizedBox.shrink();
+    final recentlyWatched = context.watch<RecentlyWatchedProvider>();
+    if (!recentlyWatched.isLoaded || recentlyWatched.entries.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final entries = recentlyWatched.entries;
     final columns = Responsive.gridColumns(context);
     final cardWidth =
         (1 / columns * (MediaQuery.sizeOf(context).width - 32) - 8).clamp(110, 220).toDouble();
@@ -383,26 +349,57 @@ class _RecentlyWatchedRowState extends State<_RecentlyWatchedRow> {
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _entries.length,
+              itemCount: entries.length,
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (context, index) {
-                final entry = _entries[index];
-                final progress = _progress[entry.key];
+                final entry = entries[index];
                 return SizedBox(
                   width: cardWidth,
-                  child: MediaCard(
-                    item: entry.item,
-                    onTap: () => _resume(entry),
-                    onRemove: () => _remove(entry),
-                    subtitle: entry.season != null ? 'S${entry.season} - E${entry.episode}' : null,
-                    progress: progress?.fraction,
-                  ),
+                  child: _RecentlyWatchedCard(entry: entry, onTap: () => _resume(context, entry)),
                 );
               },
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+/// One Recently Watched card. Its resume-progress fraction is looked up
+/// per-card (rather than pre-loaded into a map the way the old
+/// StatefulWidget version did) so this stays a simple, stateless
+/// reader of RecentlyWatchedProvider - PlaybackPositionService's own
+/// storage is unaffected by any of this and still keyed the same way.
+class _RecentlyWatchedCard extends StatelessWidget {
+  const _RecentlyWatchedCard({required this.entry, required this.onTap});
+
+  final RecentlyWatchedEntry entry;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<PlaybackProgress?>(
+      future: PlaybackPositionService().loadProgress(
+        mediaType: entry.item.type,
+        tmdbId: entry.item.id,
+        season: entry.season,
+        episode: entry.episode,
+      ),
+      builder: (context, snapshot) {
+        return MediaCard(
+          item: entry.item,
+          onTap: onTap,
+          onRemove: () => context.read<RecentlyWatchedProvider>().removeItem(
+                entry.item.type,
+                entry.item.id,
+                season: entry.season,
+                episode: entry.episode,
+              ),
+          subtitle: entry.season != null ? 'S${entry.season} - E${entry.episode}' : null,
+          progress: snapshot.data?.fraction,
+        );
+      },
     );
   }
 }
