@@ -1,4 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Without these, Google Play / Amazon Appstore assume a touchscreen
+         is required (the manifest default) and hide the app entirely from
+         Android TV and Fire TV/Firestick devices - declaring both as
+         optional is what actually lets it reach a TV in the first place,
+         on top of the runtime nav-rail switch in
+         lib/core/responsive.dart/lib/widgets/responsive_scaffold.dart. -->
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+
     <application
         android:label="ARK Theater"
         android:name="${applicationName}"
@@ -26,6 +35,10 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+                <!-- Makes the app show up on the Android TV / Fire TV home
+                     screen launcher (using the banner already declared
+                     above) instead of only being reachable by sideloading. -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

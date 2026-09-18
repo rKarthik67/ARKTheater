@@ -11,9 +11,16 @@ class NavDestinationSpec {
   const NavDestinationSpec({required this.icon, required this.selectedIcon, required this.label});
 }
 
-/// One navigation shell that becomes a bottom nav bar on phones, and a
-/// side navigation rail on tablets/desktop - the same pattern the reference
-/// web app gets "for free" from a responsive Header, done natively here.
+/// One navigation shell that becomes a bottom nav bar on phones, tablets,
+/// iPad and desktop, and a side navigation rail only on Android TV/Fire TV.
+///
+/// This is a remote-vs-touch split, not a screen-size split: an iPad and a
+/// Fire TV plugged into a TV can report the same width, but only the TV is
+/// driven by a D-pad, which is exactly where a rail down the left edge
+/// earns its keep - everywhere else (including large tablets/desktop) a
+/// bottom bar is the more natural, reachable placement, so it's used
+/// everywhere Responsive.isTv is false. See Responsive.isTv/initDeviceType
+/// for how the TV/Fire TV check itself works.
 class ResponsiveScaffold extends StatelessWidget {
   const ResponsiveScaffold({
     super.key,
@@ -32,50 +39,85 @@ class ResponsiveScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isCompact = Responsive.isMobile(context);
+    final isTv = Responsive.isTv;
 
-    if (isCompact) {
+    if (!isTv) {
+      // On phones the bar naturally reads as roughly full-width already
+      // (16px side padding on a ~360-420px screen). On tablets/iPad and
+      // desktop the same 16px padding would leave it stretched almost
+      // edge-to-edge across a much wider screen, which doesn't match how
+      // iPadOS/macOS-style bottom bars are usually presented - so on those
+      // wider layouts it's capped to a comfortable width and centered
+      // instead, floating like a dock rather than spanning the screen.
+      final isWide = Responsive.isTablet(context) || Responsive.isDesktop(context);
+
+      final navBar = LiquidGlass(
+        borderRadius: BorderRadius.circular(26),
+        // BottomNavigationBar has no direct height property - its
+        // default (icon + always-on label + built-in vertical padding)
+        // runs close to 80px, which read as oversized against the
+        // slimmer glass pill. Constraining it with a SizedBox and
+        // trimming the icon/label sizes to match brings it down to a
+        // more native-feeling ~58px without clipping.
+        //
+        // selectedItemColor/unselectedItemColor are passed directly here
+        // (rather than through a Theme override) so both the icon AND
+        // label pick up an explicit, clearly-different color for each
+        // state - important now that the glass itself is much more
+        // transparent, so whatever's scrolling behind the bar can no
+        // longer be relied on for contrast.
+        child: SizedBox(
+          height: 58,
+          child: BottomNavigationBar(
+            currentIndex: selectedIndex,
+            onTap: onDestinationSelected,
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            iconSize: 22,
+            selectedFontSize: 11,
+            unselectedFontSize: 10,
+            selectedItemColor: AppTheme.accent,
+            unselectedItemColor: Colors.white70,
+            items: [
+              for (final d in destinations)
+                BottomNavigationBarItem(icon: Icon(d.icon), activeIcon: Icon(d.selectedIcon), label: d.label),
+            ],
+          ),
+        ),
+      );
+
       return Scaffold(
         body: body,
         floatingActionButton: floatingActionButton,
         extendBody: true,
+        // Persistent chrome shouldn't jump around to dodge the keyboard
+        // (each screen's own inner Scaffold already handles its text
+        // fields), and pinning this to false also makes the bar immune to
+        // bogus bottom insets some emulators report with
+        // android:windowSoftInputMode="adjustResize".
+        resizeToAvoidBottomInset: false,
         bottomNavigationBar: Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-          child: LiquidGlass(
-            borderRadius: BorderRadius.circular(26),
-            // BottomNavigationBar has no direct height property - its
-            // default (icon + always-on label + built-in vertical
-            // padding) runs close to 80px, which read as oversized
-            // against the slimmer glass pill. Constraining it with a
-            // SizedBox and trimming the icon/label sizes to match brings
-            // it down to a more native-feeling ~58px without clipping.
-            //
-            // selectedItemColor/unselectedItemColor are passed directly
-            // here (rather than through a Theme override) so both the
-            // icon AND label pick up an explicit, clearly-different
-            // color for each state - important now that the glass
-            // itself is much more transparent, so whatever's scrolling
-            // behind the bar can no longer be relied on for contrast.
-            child: SizedBox(
-              height: 58,
-              child: BottomNavigationBar(
-                currentIndex: selectedIndex,
-                onTap: onDestinationSelected,
-                type: BottomNavigationBarType.fixed,
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                iconSize: 22,
-                selectedFontSize: 11,
-                unselectedFontSize: 10,
-                selectedItemColor: AppTheme.accent,
-                unselectedItemColor: Colors.white70,
-                items: [
-                  for (final d in destinations)
-                    BottomNavigationBarItem(icon: Icon(d.icon), activeIcon: Icon(d.selectedIcon), label: d.label),
-                ],
-              ),
-            ),
-          ),
+          child: isWide
+              // heightFactor: 1.0 is load-bearing, not decoration. Scaffold
+              // lays its bottomNavigationBar out with LOOSE constraints
+              // whose maxHeight is the whole screen, and a bare Center
+              // (Align) expands to fill any bounded height it's given. That
+              // made this slot the full height of the screen and centred the
+              // 58px pill inside it - i.e. floating in the dead middle of the
+              // display rather than sitting at the bottom edge. Pinning
+              // heightFactor to 1.0 makes it shrink-wrap the pill's real
+              // height so the slot stays 58px and Scaffold can park it at the
+              // bottom, while the horizontal centering still works.
+              ? Center(
+                  heightFactor: 1.0,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: navBar,
+                  ),
+                )
+              : navBar,
         ),
       );
     }
