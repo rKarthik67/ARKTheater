@@ -45,6 +45,13 @@ class RecentlyWatchedProvider extends ChangeNotifier {
     await _load();
   }
 
+  /// Clears every entry at once, then reloads so any screen watching this
+  /// provider empties out immediately (Settings > Data & Storage).
+  Future<void> clearAll() async {
+    await _service.clearAll();
+    await _load();
+  }
+
   Future<void> removeItem(MediaType type, int id, {int? season, int? episode}) async {
     await _service.removeItem(type, id, season: season, episode: episode);
     await _load();

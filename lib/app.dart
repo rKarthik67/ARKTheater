@@ -29,6 +29,20 @@ class ArkTheaterApp extends StatelessWidget {
           theme: theme,
           darkTheme: theme,
           themeMode: ThemeMode.dark,
+          // Settings > Appearance > Text Size, applied once here so every
+          // screen picks it up. This deliberately replaces the OS-level
+          // font scale rather than multiplying with it: the in-app slider
+          // is the single control users actually see, and compounding the
+          // two produced wildly oversized text on devices already set to
+          // large system fonts.
+          builder: (context, child) {
+            return MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.linear(settings.textScale),
+              ),
+              child: child ?? const SizedBox.shrink(),
+            );
+          },
           home: const SplashScreen(next: _RootShell()),
         );
       },

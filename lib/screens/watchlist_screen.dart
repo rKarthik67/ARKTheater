@@ -4,6 +4,7 @@ import '../core/responsive.dart';
 import '../core/theme.dart';
 import '../models/media_item.dart';
 import '../state/watchlist_provider.dart';
+import '../widgets/fade_in_on_scroll.dart';
 import '../widgets/media_card.dart';
 
 class WatchlistScreen extends StatefulWidget {
@@ -87,7 +88,11 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                               itemCount: shown.length,
                               itemBuilder: (context, index) {
                                 final item = shown[index];
-                                return MediaCard(item: item, onTap: () => widget.onSelect(item));
+                                return FadeInOnScroll(
+                                  colorSweep: false,
+                                  delay: Duration(milliseconds: 30 * (index % 8)),
+                                  child: MediaCard(item: item, onTap: () => widget.onSelect(item)),
+                                );
                               },
                             ),
                     ),

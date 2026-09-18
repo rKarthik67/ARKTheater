@@ -53,11 +53,29 @@ class AppFontChoice {
 /// the per-category font choice unset - handled by the caller, not an entry
 /// here, so there is exactly one obvious way to mean "don't override".
 const List<AppFontChoice> kAppFontChoices = [
+  // --- The app's own two families ---
   AppFontChoice('instrument_serif', 'Instrument Serif (App Default Serif)', 'Instrument Serif'),
   AppFontChoice('space_grotesk', 'Space Grotesk (App Default Sans)', 'Space Grotesk'),
+
+  // --- Elegant / luxury serifs ---
   AppFontChoice('cinzel', 'Cinzel (Luxury Display Serif)', 'Cinzel', previewWeight: FontWeight.w700),
   AppFontChoice('marcellus', 'Marcellus (Elegant Serif)', 'Marcellus'),
+  AppFontChoice('playfair_display', 'Playfair Display (High-Contrast Serif)', 'Playfair Display', previewWeight: FontWeight.w600),
+  AppFontChoice('cormorant_garamond', 'Cormorant Garamond (Refined Serif)', 'Cormorant Garamond', previewWeight: FontWeight.w600),
+  AppFontChoice('dm_serif_display', 'DM Serif Display (Bold Poster Serif)', 'DM Serif Display'),
+
+  // --- Cinematic display / condensed ---
+  AppFontChoice('bebas_neue', 'Bebas Neue (Cinematic Condensed)', 'Bebas Neue'),
+  AppFontChoice('anton', 'Anton (Heavy Poster Display)', 'Anton'),
+  AppFontChoice('oswald', 'Oswald (Condensed Sans)', 'Oswald', previewWeight: FontWeight.w600),
+
+  // --- Modern sans ---
   AppFontChoice('manrope', 'Manrope (Bright Modern Sans)', 'Manrope', previewWeight: FontWeight.w600),
+  AppFontChoice('outfit', 'Outfit (Geometric Sans)', 'Outfit', previewWeight: FontWeight.w600),
+  AppFontChoice('poppins', 'Poppins (Rounded Geometric Sans)', 'Poppins', previewWeight: FontWeight.w600),
+
+  // --- Script ---
+  AppFontChoice('great_vibes', 'Great Vibes (Flowing Script)', 'Great Vibes'),
 ];
 
 AppFontChoice? findFontChoice(String? id) {
@@ -72,16 +90,38 @@ AppFontChoice? findFontChoice(String? id) {
 /// app accent color - all picked to stay legible against the app's dark
 /// (near-black warm brown, see AppTheme.background) surfaces.
 const List<Color> kAppColorSwatches = [
+  // Neutrals
   Color(0xFFF5F5F7), // app default text (near-white)
+  Color(0xFFFFFFFF), // pure white
+  Color(0xFFB0B4C0), // cool gray
+  Color(0xFF8A8F9C), // slate gray
+
+  // Golds / warm metals
   Color(0xFFE0A83A), // app default accent (metallic gold)
   Color(0xFFF6D68A), // warm champagne
+  Color(0xFFD4AF37), // classic gold
   Color(0xFFE8C4A0), // soft copper
+  Color(0xFFCD7F32), // bronze
+  Color(0xFFFFB347), // amber
+
+  // Reds / pinks
   Color(0xFFEF6B5A), // coral red
   Color(0xFFE0526B), // rose
+  Color(0xFFE23E57), // cinema red
+  Color(0xFFFF8FA3), // blush pink
+  Color(0xFFFF5CA8), // hot pink
+
+  // Purples / blues
   Color(0xFFC77DFF), // orchid
+  Color(0xFF9D6BFF), // violet
   Color(0xFF7DA0FA), // periwinkle blue
+  Color(0xFF4EA8DE), // azure
   Color(0xFF5AD1E0), // aqua
+  Color(0xFF00E5D0), // turquoise
+
+  // Greens / yellows
   Color(0xFF6BD08A), // mint green
+  Color(0xFF3DDC84), // emerald
   Color(0xFFB8E05A), // lime
-  Color(0xFFB0B4C0), // cool gray
+  Color(0xFFF2E863), // butter yellow
 ];

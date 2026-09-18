@@ -3,6 +3,7 @@ import '../core/responsive.dart';
 import '../core/theme.dart';
 import '../models/media_item.dart';
 import 'error_view.dart';
+import 'fade_in_on_scroll.dart';
 import 'loading_indicator.dart';
 import 'media_card.dart';
 
@@ -121,7 +122,11 @@ class _PagedMediaGridState extends State<PagedMediaGrid> {
             delegate: SliverChildBuilderDelegate(
               (context, index) {
                 final item = _items[index];
-                return MediaCard(item: item, onTap: () => widget.onSelect(item));
+                return FadeInOnScroll(
+                  colorSweep: false,
+                  delay: Duration(milliseconds: 30 * (index % 8)),
+                  child: MediaCard(item: item, onTap: () => widget.onSelect(item)),
+                );
               },
               childCount: _items.length,
             ),

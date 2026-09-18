@@ -136,3 +136,69 @@ flutter:
           weight: 600
         - asset: assets/fonts/Manrope-Bold.ttf
           weight: 700
+    # Second wave of user-selectable families for Settings > Fonts &
+    # Colors. All OFL-licensed Google Fonts, bundled rather than fetched at
+    # runtime for the same reason as every family above (see
+    # core/theme.dart): a runtime fetch fails silently into a fallback font.
+    # Variable (single-file) families list the same asset per weight, the
+    # same way Space Grotesk already does.
+    - family: Playfair Display
+      fonts:
+        - asset: assets/fonts/PlayfairDisplay-Variable.ttf
+          weight: 400
+        - asset: assets/fonts/PlayfairDisplay-Variable.ttf
+          weight: 500
+        - asset: assets/fonts/PlayfairDisplay-Variable.ttf
+          weight: 600
+        - asset: assets/fonts/PlayfairDisplay-Variable.ttf
+          weight: 700
+    - family: Cormorant Garamond
+      fonts:
+        - asset: assets/fonts/CormorantGaramond-Variable.ttf
+          weight: 400
+        - asset: assets/fonts/CormorantGaramond-Variable.ttf
+          weight: 500
+        - asset: assets/fonts/CormorantGaramond-Variable.ttf
+          weight: 600
+        - asset: assets/fonts/CormorantGaramond-Variable.ttf
+          weight: 700
+    - family: DM Serif Display
+      fonts:
+        - asset: assets/fonts/DMSerifDisplay-Regular.ttf
+    - family: Bebas Neue
+      fonts:
+        - asset: assets/fonts/BebasNeue-Regular.ttf
+    - family: Anton
+      fonts:
+        - asset: assets/fonts/Anton-Regular.ttf
+    - family: Oswald
+      fonts:
+        - asset: assets/fonts/Oswald-Variable.ttf
+          weight: 400
+        - asset: assets/fonts/Oswald-Variable.ttf
+          weight: 500
+        - asset: assets/fonts/Oswald-Variable.ttf
+          weight: 600
+        - asset: assets/fonts/Oswald-Variable.ttf
+          weight: 700
+    - family: Outfit
+      fonts:
+        - asset: assets/fonts/Outfit-Variable.ttf
+          weight: 400
+        - asset: assets/fonts/Outfit-Variable.ttf
+          weight: 500
+        - asset: assets/fonts/Outfit-Variable.ttf
+          weight: 600
+        - asset: assets/fonts/Outfit-Variable.ttf
+          weight: 700
+    - family: Poppins
+      fonts:
+        - asset: assets/fonts/Poppins-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Poppins-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Poppins-Bold.ttf
+          weight: 700
+    - family: Great Vibes
+      fonts:
+        - asset: assets/fonts/GreatVibes-Regular.ttf

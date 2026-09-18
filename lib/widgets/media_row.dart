@@ -3,6 +3,7 @@ import '../core/responsive.dart';
 import '../core/app_fonts.dart';
 import '../core/theme.dart';
 import '../models/media_item.dart';
+import 'fade_in_on_scroll.dart';
 import 'media_card.dart';
 
 /// Horizontal, swipeable rail of poster cards - used for "Trending",
@@ -44,10 +45,14 @@ class MediaRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
+          // The row's title sweeps in from the accent color and lifts into
+          // place as the row scrolls into view (Settings > Motion turns
+          // this off app-wide).
+          FadeInOnScroll(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
                 Expanded(
                   child: Text(
                     title,
@@ -66,6 +71,7 @@ class MediaRow extends StatelessWidget {
                     child: const Text('View more'),
                   ),
               ],
+            ),
             ),
           ),
           const SizedBox(height: 10),

@@ -133,6 +133,12 @@ class PlaybackPositionService {
     await _writeMap(map);
   }
 
+  /// Forgets every saved resume position (Settings > Data & Storage).
+  Future<void> clearAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_key);
+  }
+
   Future<Map<String, dynamic>> _readMap() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_key);

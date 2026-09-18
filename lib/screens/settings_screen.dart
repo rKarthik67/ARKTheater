@@ -4,14 +4,24 @@ import 'package:provider/provider.dart';
 import '../core/app_fonts.dart';
 import '../core/theme.dart';
 import '../models/media_item.dart';
+import '../services/playback_position_service.dart';
+import '../state/recently_watched_provider.dart';
 import '../state/settings_provider.dart';
+import '../state/watchlist_provider.dart';
+import '../widgets/fade_in_on_scroll.dart';
+import 'platforms_screen.dart' show kWatchRegions;
 import 'watchlist_screen.dart';
+
+/// App version, shown in About. Kept in sync by hand with pubspec.yaml's
+/// `version:` - reading it at runtime would mean adding package_info_plus
+/// as a dependency just for one line of text.
+const _kAppVersion = '1.0.0';
 
 /// Settings tab - replaces the old standalone "Watchlist" bottom-nav
 /// entry. The watchlist itself moved here (first list tile below) rather
-/// than disappearing, plus a slider that controls how transparent every
-/// "Liquid Glass" surface in the app (nav bar, sheets, player controls)
-/// renders, live.
+/// than disappearing, alongside every app-wide preference: glass
+/// transparency, accent color, per-category fonts and colors, text size,
+/// scroll animations, the default watch region, and data housekeeping.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key, required this.onSelect});
 
@@ -24,54 +34,33 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.fromLTRB(0, 8, 0, 96),
         children: [
-          _SectionLabel('Library'),
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            color: AppTheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: AppTheme.border),
-            ),
+          // ---------------------------------------------------------------
+          const _SectionLabel('Library'),
+          _SettingsCard(
             child: ListTile(
               leading: const Icon(Icons.bookmark_outline, color: AppTheme.accent),
               title: const Text('My Watchlist'),
-              subtitle: const Text(
-                'Titles you bookmarked',
-                style: AppTheme.metaStyle,
-              ),
+              subtitle: const Text('Titles you bookmarked', style: AppTheme.metaStyle),
               trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
               onTap: () {
                 Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => WatchlistScreen(onSelect: onSelect),
-                  ),
+                  MaterialPageRoute(builder: (_) => WatchlistScreen(onSelect: onSelect)),
                 );
               },
             ),
           ),
-          const SizedBox(height: 12),
-          _SectionLabel('Appearance'),
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            color: AppTheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: AppTheme.border),
-            ),
+
+          // ---------------------------------------------------------------
+          const _SectionLabel('Appearance'),
+          _SettingsCard(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.blur_on, color: AppTheme.accent, size: 20),
-                      const SizedBox(width: 10),
-                      const Text('Liquid Glass Transparency', style: AppTheme.cardTitleStyle),
-                    ],
-                  ),
+                  const _CardHeader(icon: Icons.blur_on, title: 'Liquid Glass Transparency'),
                   const SizedBox(height: 6),
                   const Text(
                     'Controls how see-through the nav bar, sheets, and '
@@ -97,32 +86,53 @@ class SettingsScreen extends StatelessWidget {
                       const Icon(Icons.gradient, size: 18, color: AppTheme.textSecondary),
                     ],
                   ),
-                  const SizedBox(height: 4),
                 ],
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          _SectionLabel('App Theme'),
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            color: AppTheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: AppTheme.border),
+          _SettingsCard(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _CardHeader(icon: Icons.format_size, title: 'Text Size'),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Scales every piece of text in the app. Handy on a TV '
+                    'across the room, or to fit more on screen on a tablet.',
+                    style: AppTheme.metaStyle,
+                  ),
+                  Row(
+                    children: [
+                      const Text('A', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                      Expanded(
+                        child: Slider(
+                          value: settings.textScale,
+                          min: SettingsProvider.minTextScale,
+                          max: SettingsProvider.maxTextScale,
+                          divisions: 11,
+                          label: '${(settings.textScale * 100).round()}%',
+                          onChanged: settings.isLoaded ? (value) => settings.setTextScale(value) : null,
+                        ),
+                      ),
+                      const Text('A', style: TextStyle(color: AppTheme.textSecondary, fontSize: 21)),
+                    ],
+                  ),
+                ],
+              ),
             ),
+          ),
+
+          // ---------------------------------------------------------------
+          const _SectionLabel('App Theme'),
+          _SettingsCard(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.palette_outlined, color: AppTheme.accent, size: 20),
-                      const SizedBox(width: 10),
-                      const Text('Accent Color', style: AppTheme.cardTitleStyle),
-                    ],
-                  ),
+                  const _CardHeader(icon: Icons.palette_outlined, title: 'Accent Color'),
                   const SizedBox(height: 6),
                   const Text(
                     'Recolors buttons, the slider, selected nav items, and '
@@ -140,27 +150,58 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          _SectionLabel('Fonts & Colors'),
-          Card(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            color: AppTheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-              side: const BorderSide(color: AppTheme.border),
+
+          // ---------------------------------------------------------------
+          const _SectionLabel('Motion'),
+          _SettingsCard(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _CardHeader(icon: Icons.animation, title: 'Scroll Animations'),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Text and cards fade and lift into place as they scroll '
+                    'into view, sweeping in from the color below.',
+                    style: AppTheme.metaStyle,
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    activeColor: AppTheme.resolvedAccent(context),
+                    title: const Text('Reduce motion', style: AppTheme.cardTitleStyle),
+                    subtitle: const Text(
+                      'Turns all scroll-in animations off.',
+                      style: AppTheme.metaStyle,
+                    ),
+                    value: settings.reduceMotion,
+                    onChanged: settings.isLoaded ? (value) => settings.setReduceMotion(value) : null,
+                  ),
+                  if (!settings.reduceMotion) ...[
+                    const SizedBox(height: 4),
+                    const Text('Animation sweep color', style: AppTheme.cardTitleStyle),
+                    const SizedBox(height: 8),
+                    _ColorSwatchRow(
+                      selected: settings.scrollAnimationColor,
+                      defaultColor: AppTheme.resolvedAccent(context),
+                      onSelect: (color) => settings.setScrollAnimationColor(color),
+                    ),
+                  ],
+                ],
+              ),
             ),
+          ),
+
+          // ---------------------------------------------------------------
+          const _SectionLabel('Fonts & Colors'),
+          _SettingsCard(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.text_fields, color: AppTheme.accent, size: 20),
-                      const SizedBox(width: 10),
-                      const Text('Text Font & Color', style: AppTheme.cardTitleStyle),
-                    ],
-                  ),
+                  const _CardHeader(icon: Icons.text_fields, title: 'Text Font & Color'),
                   const SizedBox(height: 6),
                   const Text(
                     'Pick a font family and color independently for each '
@@ -175,15 +216,233 @@ class SettingsScreen extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 24),
+
+          // ---------------------------------------------------------------
+          const _SectionLabel('Catalog'),
+          _SettingsCard(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _CardHeader(icon: Icons.public, title: 'Watch Region'),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Which country\'s streaming catalog the Platforms tab '
+                    'filters by. Same setting as the picker on that screen.',
+                    style: AppTheme.metaStyle,
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: settings.watchRegion,
+                    isExpanded: true,
+                    dropdownColor: AppTheme.surfaceVariant,
+                    style: const TextStyle(
+                      fontFamily: AppTheme.sansFont,
+                      color: AppTheme.textPrimary,
+                      fontSize: 13,
+                    ),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      filled: true,
+                      fillColor: AppTheme.surfaceVariant,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: const BorderSide(color: AppTheme.border),
+                      ),
+                    ),
+                    items: [
+                      for (final (code, label) in kWatchRegions)
+                        DropdownMenuItem(value: code, child: Text('$label ($code)')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) settings.setWatchRegion(value);
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ---------------------------------------------------------------
+          const _SectionLabel('Data & Storage'),
+          _SettingsCard(
+            child: Column(
+              children: [
+                _DangerTile(
+                  icon: Icons.history_toggle_off,
+                  title: 'Clear Recently Watched',
+                  subtitle: 'Empties the Continue Watching row on Home.',
+                  confirmMessage:
+                      'Remove every title from Recently Watched? Your watchlist and saved '
+                      'resume positions are untouched.',
+                  onConfirmed: (context) => context.read<RecentlyWatchedProvider>().clearAll(),
+                ),
+                const Divider(height: 1, color: AppTheme.border),
+                _DangerTile(
+                  icon: Icons.bookmark_remove_outlined,
+                  title: 'Clear Watchlist',
+                  subtitle: 'Removes every bookmarked title.',
+                  confirmMessage: 'Remove every title from your watchlist? This can\'t be undone.',
+                  onConfirmed: (context) => context.read<WatchlistProvider>().clearAll(),
+                ),
+                const Divider(height: 1, color: AppTheme.border),
+                _DangerTile(
+                  icon: Icons.restore,
+                  title: 'Clear Resume Positions',
+                  subtitle: 'Every title starts from the beginning again.',
+                  confirmMessage:
+                      'Forget where you left off in every title? The titles themselves stay '
+                      'in Recently Watched.',
+                  onConfirmed: (_) => PlaybackPositionService().clearAll(),
+                ),
+                const Divider(height: 1, color: AppTheme.border),
+                _DangerTile(
+                  icon: Icons.image_not_supported_outlined,
+                  title: 'Clear Image Cache',
+                  subtitle: 'Frees memory if posters look stale or wrong.',
+                  confirmMessage:
+                      'Drop all cached poster and backdrop images from memory? They\'ll be '
+                      'fetched again as you browse.',
+                  onConfirmed: (_) async {
+                    PaintingBinding.instance.imageCache
+                      ..clear()
+                      ..clearLiveImages();
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          // ---------------------------------------------------------------
+          const _SectionLabel('About'),
+          _SettingsCard(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _CardHeader(icon: Icons.info_outline, title: 'ARK Theater'),
+                  const SizedBox(height: 8),
+                  const Text('Version $_kAppVersion', style: AppTheme.metaStyle),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Title data, artwork, and cast information provided by '
+                    'The Movie Database (TMDB). This product uses the TMDB '
+                    'API but is not endorsed or certified by TMDB.',
+                    style: AppTheme.metaStyle,
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 }
 
+/// The rounded, bordered card every settings group sits in - one place to
+/// change the shape/color instead of repeating it eight times above.
+class _SettingsCard extends StatelessWidget {
+  const _SettingsCard({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeInOnScroll(
+      // Cards carry images/switches as well as text, so no color sweep
+      // here - just the fade and lift.
+      colorSweep: false,
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        color: AppTheme.surface,
+        clipBehavior: Clip.antiAlias,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppTheme.border),
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
+class _CardHeader extends StatelessWidget {
+  const _CardHeader({required this.icon, required this.title});
+
+  final IconData icon;
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: AppTheme.resolvedAccent(context), size: 20),
+        const SizedBox(width: 10),
+        Expanded(child: Text(title, style: AppTheme.cardTitleStyle)),
+      ],
+    );
+  }
+}
+
+/// A destructive action row that always asks first. The confirm dialog is
+/// mandatory rather than optional because every one of these wipes data
+/// with no undo.
+class _DangerTile extends StatelessWidget {
+  const _DangerTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.confirmMessage,
+    required this.onConfirmed,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String confirmMessage;
+  final Future<void> Function(BuildContext context) onConfirmed;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(icon, color: AppTheme.textSecondary),
+      title: Text(title),
+      subtitle: Text(subtitle, style: AppTheme.metaStyle),
+      onTap: () async {
+        final messenger = ScaffoldMessenger.of(context);
+        final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            backgroundColor: AppTheme.surface,
+            title: Text(title),
+            content: Text(confirmMessage, style: AppTheme.metaStyle),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Clear', style: TextStyle(color: Color(0xFFEF6B5A))),
+              ),
+            ],
+          ),
+        );
+        if (confirmed != true || !context.mounted) return;
+        await onConfirmed(context);
+        messenger.showSnackBar(SnackBar(content: Text('$title - done.')));
+      },
+    );
+  }
+}
+
 /// One row of selectable color swatches (plus a "reset to default" tile) -
-/// shared by the accent-color picker and each font-color picker below.
+/// shared by the accent-color picker, the animation sweep color, and each
+/// font-color picker below.
 class _ColorSwatchRow extends StatelessWidget {
   const _ColorSwatchRow({required this.selected, required this.defaultColor, required this.onSelect});
 
@@ -318,9 +577,11 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 6),
-      child: Text(text.toUpperCase(), style: AppTheme.metaStyle.copyWith(letterSpacing: 1.0)),
+    return FadeInOnScroll(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
+        child: Text(text.toUpperCase(), style: AppTheme.metaStyle.copyWith(letterSpacing: 1.0)),
+      ),
     );
   }
 }

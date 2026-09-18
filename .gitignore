@@ -50,3 +50,9 @@ app.*.map.json
 # Gradle's own build output (distinct from Flutter's top-level /build/).
 android/build/
 android/app/build/
+
+# Local cache of media_kit's native jars (see android/build.gradle.kts).
+# Ignored by default so a 23MB binary blob doesn't land in git history -
+# delete these two lines and commit the folder if you'd rather have
+# clone-and-build work without GitHub Releases being reachable.
+/android/prebuilt/

@@ -12,6 +12,10 @@ class SettingsProvider extends ChangeNotifier {
   static const _accentColorKey = 'settings_accent_color';
   static const _fontFamilyKeyPrefix = 'settings_font_family_';
   static const _fontColorKeyPrefix = 'settings_font_color_';
+  static const _reduceMotionKey = 'settings_reduce_motion';
+  static const _textScaleKey = 'settings_text_scale';
+  static const _watchRegionKey = 'settings_watch_region';
+  static const _scrollAnimationColorKey = 'settings_scroll_animation_color';
 
   /// Multiplies every [LiquidGlass] surface's base opacity/tint. 1.0 is the
   /// app's original, heavier frosted look; lower values push toward a very
@@ -47,6 +51,33 @@ class SettingsProvider extends ChangeNotifier {
   AppFontChoice? fontChoiceFor(TextCategory category) => findFontChoice(_categoryFontId[category]);
   Color? fontColorFor(TextCategory category) => _categoryFontColor[category];
 
+  /// Turns off the app's scroll-in text animations (see
+  /// widgets/fade_in_on_scroll.dart). Respected app-wide, and also the
+  /// accessibility-friendly escape hatch for anyone who finds motion
+  /// distracting or is on a slower device.
+  bool _reduceMotion = false;
+  bool get reduceMotion => _reduceMotion;
+
+  /// Multiplies every text size in the app, applied once at the root via
+  /// MediaQuery's textScaler (see ArkTheaterApp). 1.0 is the design size.
+  double _textScale = 1.0;
+  double get textScale => _textScale;
+
+  static const double minTextScale = 0.85;
+  static const double maxTextScale = 1.4;
+
+  /// Which country's streaming catalog the Platforms screen filters by.
+  /// Lived only in PlatformsScreen's local state before, so it reset on
+  /// every app launch; persisting it here makes the choice stick.
+  String _watchRegion = 'IN';
+  String get watchRegion => _watchRegion;
+
+  /// `null` means the scroll-in animation fades text in without any color
+  /// shift. Set a color and text sweeps from that color into its own as it
+  /// animates in.
+  Color? _scrollAnimationColor;
+  Color? get scrollAnimationColor => _scrollAnimationColor;
+
   bool _isLoaded = false;
   bool get isLoaded => _isLoaded;
 
@@ -65,6 +96,12 @@ class SettingsProvider extends ChangeNotifier {
       if (accentValue != null) {
         _accentColor = Color(accentValue);
       }
+      _reduceMotion = prefs.getBool(_reduceMotionKey) ?? false;
+      final scale = prefs.getDouble(_textScaleKey);
+      if (scale != null) _textScale = scale.clamp(minTextScale, maxTextScale);
+      _watchRegion = prefs.getString(_watchRegionKey) ?? 'IN';
+      final scrollColor = prefs.getInt(_scrollAnimationColorKey);
+      if (scrollColor != null) _scrollAnimationColor = Color(scrollColor);
       for (final category in TextCategory.values) {
         final fontId = prefs.getString('$_fontFamilyKeyPrefix${category.name}');
         if (fontId != null) _categoryFontId[category] = fontId;
@@ -137,6 +174,59 @@ class SettingsProvider extends ChangeNotifier {
         await prefs.remove(key);
       } else {
         await prefs.setInt(key, color.value);
+      }
+    } catch (_) {
+      // Best-effort persistence.
+    }
+  }
+
+  Future<void> setReduceMotion(bool value) async {
+    if (value == _reduceMotion) return;
+    _reduceMotion = value;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_reduceMotionKey, value);
+    } catch (_) {
+      // Best-effort persistence.
+    }
+  }
+
+  Future<void> setTextScale(double value) async {
+    final clamped = value.clamp(minTextScale, maxTextScale);
+    if (clamped == _textScale) return;
+    _textScale = clamped;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble(_textScaleKey, clamped);
+    } catch (_) {
+      // Best-effort persistence.
+    }
+  }
+
+  Future<void> setWatchRegion(String code) async {
+    if (code == _watchRegion) return;
+    _watchRegion = code;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_watchRegionKey, code);
+    } catch (_) {
+      // Best-effort persistence.
+    }
+  }
+
+  /// Pass `null` for a plain fade with no color sweep.
+  Future<void> setScrollAnimationColor(Color? color) async {
+    _scrollAnimationColor = color;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (color == null) {
+        await prefs.remove(_scrollAnimationColorKey);
+      } else {
+        await prefs.setInt(_scrollAnimationColorKey, color.value);
       }
     } catch (_) {
       // Best-effort persistence.

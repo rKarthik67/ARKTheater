@@ -11,6 +11,7 @@ import '../services/tmdb_service.dart';
 import '../state/recently_watched_provider.dart';
 import '../state/watchlist_provider.dart';
 import '../widgets/error_view.dart';
+import '../widgets/fade_in_on_scroll.dart';
 import '../widgets/hero_banner.dart';
 import '../widgets/loading_indicator.dart';
 import '../widgets/media_card.dart';
@@ -339,9 +340,11 @@ class _RecentlyWatchedRow extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Text('Recently Watched', style: Theme.of(context).textTheme.titleMedium),
+          FadeInOnScroll(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text('Recently Watched', style: Theme.of(context).textTheme.titleMedium),
+            ),
           ),
           const SizedBox(height: 10),
           SizedBox(

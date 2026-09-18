@@ -47,6 +47,12 @@ class RecentlyWatchedService {
     await prefs.setString(_key, jsonEncode(entries.map(_toJson).toList()));
   }
 
+  /// Wipes the whole Recently Watched list (Settings > Data & Storage).
+  Future<void> clearAll() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_key);
+  }
+
   Map<String, dynamic> _toJson(RecentlyWatchedEntry e) => {
         'id': e.item.id,
         'type': e.item.type.name,

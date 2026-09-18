@@ -23,6 +23,13 @@ class WatchlistProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Empties the whole watchlist in one go (Settings > Data & Storage).
+  Future<void> clearAll() async {
+    _items = [];
+    notifyListeners();
+    await _service.save(const []);
+  }
+
   Future<void> toggle(MediaItem item) async {
     final exists = contains(item.type, item.id);
     if (exists) {
