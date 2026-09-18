@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../core/app_fonts.dart';
 import '../core/theme.dart';
 import '../models/media_item.dart';
 import '../state/watchlist_provider.dart';
@@ -116,12 +117,12 @@ class MediaCard extends StatelessWidget {
               subtitle!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: AppTheme.metaStyle,
+              style: AppTheme.resolvedStyle(context, AppTheme.metaStyle, TextCategory.info),
             )
           else if (item.year.isNotEmpty)
             Text(
               item.year,
-              style: AppTheme.metaStyle,
+              style: AppTheme.resolvedStyle(context, AppTheme.metaStyle, TextCategory.info),
             ),
         ],
       ),

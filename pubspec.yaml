@@ -113,3 +113,26 @@ flutter:
           weight: 600
         - asset: assets/fonts/SpaceGrotesk-Variable.ttf
           weight: 700
+    # Added for the Settings > Fonts & Colors customization feature - free
+    # stand-ins for the "Casko Luxury Demo" / "Bright Pasqia DEMO" fonts
+    # requested (see core/app_fonts.dart's doc comment for why substitutes).
+    - family: Cinzel
+      fonts:
+        - asset: assets/fonts/Cinzel-Regular.ttf
+        - asset: assets/fonts/Cinzel-Bold.ttf
+          weight: 700
+    - family: Marcellus
+      fonts:
+        - asset: assets/fonts/Marcellus-Regular.ttf
+    - family: Manrope
+      fonts:
+        - asset: assets/fonts/Manrope-Light.ttf
+          weight: 300
+        - asset: assets/fonts/Manrope-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Manrope-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Manrope-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Manrope-Bold.ttf
+          weight: 700

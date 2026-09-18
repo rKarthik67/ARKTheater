@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'core/theme.dart';
+import 'state/settings_provider.dart';
 import 'models/media_item.dart';
 import 'screens/detail_screen.dart';
 import 'screens/home_screen.dart';
@@ -16,13 +18,20 @@ class ArkTheaterApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'ARKTheater',
-      debugShowCheckedModeBanner: false,
-      theme: AppTheme.dark,
-      darkTheme: AppTheme.dark,
-      themeMode: ThemeMode.dark,
-      home: const SplashScreen(next: _RootShell()),
+    // Rebuilds the whole app's ThemeData whenever the user picks a new
+    // accent color from Settings > App Theme - see AppTheme.themeFor().
+    return Consumer<SettingsProvider>(
+      builder: (context, settings, child) {
+        final theme = AppTheme.themeFor(accentColor: settings.accentColor ?? AppTheme.accent);
+        return MaterialApp(
+          title: 'ARKTheater',
+          debugShowCheckedModeBanner: false,
+          theme: theme,
+          darkTheme: theme,
+          themeMode: ThemeMode.dark,
+          home: const SplashScreen(next: _RootShell()),
+        );
+      },
     );
   }
 }

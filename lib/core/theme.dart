@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'app_fonts.dart';
+import '../state/settings_provider.dart';
 
 /// Visual identity: color palette borrowed from the C.L.A.R.A. desktop
 /// app's "dark gold" design system (D:\CLARA\apps\desktop\ui\index.html),
@@ -17,6 +20,16 @@ import 'package:flutter/material.dart';
 /// connection produces: no crash, no error, just plain-looking text that
 /// never explains why the "different font styles" aren't visible.
 /// Bundling the .ttf files means the fonts always render, offline or not.
+///
+/// User customization: the app's accent color and three named text
+/// categories (see [TextCategory] in app_fonts.dart) can be overridden per
+/// user from the Settings screen's "Fonts & Colors" / "App Theme" sections,
+/// persisted in [SettingsProvider]. [themeFor] builds the live ThemeData
+/// from whatever accent is currently chosen; [resolvedStyle] layers a
+/// category's font/color override on top of one of the named TextStyles
+/// below. Both fall back to this class's original constants when the user
+/// hasn't customized anything, so the app looks exactly as before out of
+/// the box.
 class AppTheme {
   AppTheme._();
 
@@ -33,7 +46,11 @@ class AppTheme {
   static const Color border = Color(0xFF2E2719);
   static const Color borderWarm = Color(0xFF3D3320);
 
-  // --- Accent: C.L.A.R.A.'s metallic gold (--gold family) ---
+  // --- Accent: C.L.A.R.A.'s metallic gold (--gold family) - the app's
+  // *default* accent. A user-chosen accent (SettingsProvider.accentColor)
+  // overrides this in themeFor()'s ColorScheme/component themes, but this
+  // constant stays as the fallback and is still what a handful of widgets
+  // reference directly for one-off highlights that aren't Theme-driven. ---
   static const Color accent = Color(0xFFE0A83A);
   static const Color accentHigh = Color(0xFFF6D68A);
   static const Color accentLow = Color(0xFFA9761C);
@@ -117,6 +134,17 @@ class AppTheme {
     letterSpacing: 0.3,
   );
 
+  /// Cast & crew name text under the cast row's avatar on the detail
+  /// screen - plain Space Grotesk by default, its own customizable
+  /// category ([TextCategory.castDetails]) since it sits so close to a
+  /// person's photo that a mismatched font reads oddly fast.
+  static const TextStyle castNameStyle = TextStyle(
+    fontFamily: sansFont,
+    fontSize: 12,
+    fontWeight: FontWeight.w500,
+    color: textPrimary,
+  );
+
   /// C.L.A.R.A.'s `--shine` gradient - the metallic gold sheen it uses for
   /// primary buttons and gradient-clipped brand text.
   static const LinearGradient shine = LinearGradient(
@@ -125,6 +153,43 @@ class AppTheme {
     colors: [accentHigh, accent, accentLow],
     stops: [0.0, 0.42, 1.0],
   );
+
+  /// Layers a [TextCategory]'s user-chosen font family + color (from
+  /// Settings > Fonts & Colors) on top of [base]. Falls back to [base]
+  /// untouched wherever the user hasn't customized that category - so
+  /// every call site keeps working exactly as before until someone opts
+  /// in. Safe to call without a [SettingsProvider] ancestor (returns
+  /// [base] unchanged, e.g. in a widget test).
+  static TextStyle resolvedStyle(BuildContext context, TextStyle base, TextCategory category) {
+    SettingsProvider? settings;
+    try {
+      settings = context.watch<SettingsProvider>();
+    } catch (_) {
+      return base;
+    }
+    final font = settings.fontChoiceFor(category);
+    final color = settings.fontColorFor(category);
+    if (font == null && color == null) return base;
+    return base.copyWith(
+      fontFamily: font?.fontFamily,
+      // A custom font family with no matching weight file for the base
+      // style's fontWeight would otherwise ask the engine for a weight it
+      // doesn't have; clearing it lets each bundled family fall back to
+      // its own normal weight instead of a silently-substituted one.
+      fontWeight: font != null ? FontWeight.w500 : base.fontWeight,
+      color: color ?? base.color,
+    );
+  }
+
+  /// The live accent color: the user's Settings > App Theme choice if set,
+  /// otherwise [accent].
+  static Color resolvedAccent(BuildContext context) {
+    try {
+      return context.watch<SettingsProvider>().accentColor ?? accent;
+    } catch (_) {
+      return accent;
+    }
+  }
 
   /// Space Grotesk for body/UI text, Instrument Serif for display and
   /// headline slots (including AppBar titles, which default to
@@ -144,19 +209,27 @@ class AppTheme {
     );
   }
 
-  static ThemeData get dark {
+  /// Builds the app's ThemeData with [accentColor] (defaults to the app's
+  /// own gold [accent]) driving every Material-component color that reads
+  /// from the ColorScheme/component themes below: buttons, the slider,
+  /// selected nav rail/bottom-nav items, and the AppBar. A handful of
+  /// widgets elsewhere in the app paint with the [accent] constant
+  /// directly rather than through Theme.of(context) and won't repaint
+  /// from this - see the Settings screen's "App Theme" section note.
+  static ThemeData themeFor({Color accentColor = accent}) {
     final base = ThemeData.dark(useMaterial3: true);
     final textTheme = _textTheme(base.textTheme).apply(
       bodyColor: textPrimary,
       displayColor: textPrimary,
     );
     const buttonTextStyle = TextStyle(fontFamily: sansFont, fontWeight: FontWeight.w600);
+    final glow = accentColor.withOpacity(0.22);
 
     return base.copyWith(
       scaffoldBackgroundColor: background,
       colorScheme: base.colorScheme.copyWith(
-        primary: accent,
-        secondary: accent,
+        primary: accentColor,
+        secondary: accentColor,
         surface: surface,
         onSurface: textPrimary,
         error: error,
@@ -172,7 +245,7 @@ class AppTheme {
       textTheme: textTheme,
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: accent,
+          backgroundColor: accentColor,
           foregroundColor: goldText,
           textStyle: buttonTextStyle,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
@@ -189,7 +262,7 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: accent,
+          foregroundColor: accentColor,
           textStyle: buttonTextStyle,
         ),
       ),
@@ -209,24 +282,24 @@ class AppTheme {
       ),
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: Colors.transparent,
-        selectedIconTheme: const IconThemeData(color: accent),
+        selectedIconTheme: IconThemeData(color: accentColor),
         unselectedIconTheme: const IconThemeData(color: textSecondary),
-        selectedLabelTextStyle: const TextStyle(fontFamily: sansFont, color: accent, fontWeight: FontWeight.w600),
+        selectedLabelTextStyle: TextStyle(fontFamily: sansFont, color: accentColor, fontWeight: FontWeight.w600),
         unselectedLabelTextStyle: const TextStyle(fontFamily: sansFont, color: textSecondary),
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        selectedItemColor: accent,
+        selectedItemColor: accentColor,
         unselectedItemColor: textSecondary,
         selectedLabelStyle: const TextStyle(fontFamily: sansFont, fontWeight: FontWeight.w600),
         unselectedLabelStyle: const TextStyle(fontFamily: sansFont),
       ),
       sliderTheme: SliderThemeData(
-        activeTrackColor: accent,
-        thumbColor: accent,
+        activeTrackColor: accentColor,
+        thumbColor: accentColor,
         inactiveTrackColor: borderWarm,
-        overlayColor: accentGlow,
+        overlayColor: glow,
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: surfaceTertiary,
@@ -235,4 +308,8 @@ class AppTheme {
       ),
     );
   }
+
+  /// The app's default-accent theme - unchanged behavior for any call site
+  /// that doesn't need to react to the user's chosen accent color.
+  static ThemeData get dark => themeFor();
 }

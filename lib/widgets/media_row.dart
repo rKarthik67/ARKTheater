@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/responsive.dart';
+import '../core/app_fonts.dart';
 import '../core/theme.dart';
 import '../models/media_item.dart';
 import 'media_card.dart';
@@ -47,7 +48,12 @@ class MediaRow extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Row(
               children: [
-                Expanded(child: Text(title, style: AppTheme.sectionHeaderStyle)),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: AppTheme.resolvedStyle(context, AppTheme.sectionHeaderStyle, TextCategory.header),
+                  ),
+                ),
                 if (onViewMore != null)
                   TextButton(
                     onPressed: onViewMore,

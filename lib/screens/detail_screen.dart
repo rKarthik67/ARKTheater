@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/config.dart';
 import '../core/responsive.dart';
+import '../core/app_fonts.dart';
 import '../core/theme.dart';
 import '../models/media_detail.dart';
 import '../models/media_item.dart';
@@ -361,7 +362,11 @@ class _DetailScreenState extends State<DetailScreen> {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(fontSize: 12),
+                                  style: AppTheme.resolvedStyle(
+                                    context,
+                                    AppTheme.castNameStyle,
+                                    TextCategory.castDetails,
+                                  ),
                                 ),
                               ],
                             ),
@@ -404,7 +409,12 @@ class _Chip extends StatelessWidget {
         color: accent ? AppTheme.accent : AppTheme.surfaceVariant,
         borderRadius: BorderRadius.circular(20),
       ),
-      child: Text(label, style: accent ? AppTheme.badgeStyle : AppTheme.metaStyle),
+      child: Text(
+        label,
+        style: accent
+            ? AppTheme.badgeStyle
+            : AppTheme.resolvedStyle(context, AppTheme.metaStyle, TextCategory.info),
+      ),
     );
   }
 }
