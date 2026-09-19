@@ -86,7 +86,16 @@ dependencies:
   # so an imported .json can be read back in from wherever the user
   # saved/received it.
   share_plus: ^7.2.2
-  file_picker: ^6.1.1
+  # Must stay >=8: file_picker 6.x/7.x still ship a v1-embedding
+  # `registerWith(PluginRegistry.Registrar)` in FilePickerPlugin.java, and
+  # Flutter 3.29 deleted the v1 embedding outright - so on Flutter 3.35 the
+  # plugin fails to compile with "cannot find symbol: class Registrar"
+  # before any of this app's own code is even reached. The upper bound is
+  # deliberately loose so pub resolves the newest it can; nothing in
+  # services/watchlist_backup_service.dart uses API that changed across
+  # those majors (pickFiles/FileType.custom/allowedExtensions/withData and
+  # PlatformFile.bytes/.path are identical from 6.x through 10.x).
+  file_picker: '>=8.0.0 <11.0.0'
 
 dev_dependencies:
   flutter_test:
