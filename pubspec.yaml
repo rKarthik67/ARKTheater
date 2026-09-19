@@ -79,6 +79,15 @@ dependencies:
   # directly since app code imports it.
   path_provider: ^2.1.5
 
+  # Watchlist export/import (Settings > Library > Export/Import
+  # Watchlist) - share_plus opens the native share sheet (AirDrop,
+  # Messages, Save to Files, etc.) so an exported watchlist.json can
+  # reach another device; file_picker opens the native file-open dialog
+  # so an imported .json can be read back in from wherever the user
+  # saved/received it.
+  share_plus: ^7.2.2
+  file_picker: ^6.1.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

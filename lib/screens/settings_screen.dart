@@ -6,6 +6,7 @@ import '../core/app_fonts.dart';
 import '../core/theme.dart';
 import '../models/media_item.dart';
 import '../services/playback_position_service.dart';
+import '../services/watchlist_backup_service.dart';
 import '../state/recently_watched_provider.dart';
 import '../state/settings_provider.dart';
 import '../state/watchlist_provider.dart';
@@ -40,16 +41,40 @@ class SettingsScreen extends StatelessWidget {
           // ---------------------------------------------------------------
           const _SectionLabel('Library'),
           _SettingsCard(
-            child: ListTile(
-              leading: const Icon(Icons.bookmark_outline, color: AppTheme.accent),
-              title: const Text('My Watchlist'),
-              subtitle: const Text('Titles you bookmarked', style: AppTheme.metaStyle),
-              trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => WatchlistScreen(onSelect: onSelect)),
-                );
-              },
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.bookmark_outline, color: AppTheme.accent),
+                  title: const Text('My Watchlist'),
+                  subtitle: const Text('Titles you bookmarked', style: AppTheme.metaStyle),
+                  trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => WatchlistScreen(onSelect: onSelect)),
+                    );
+                  },
+                ),
+                const Divider(height: 1, color: AppTheme.border),
+                ListTile(
+                  leading: const Icon(Icons.ios_share, color: AppTheme.textSecondary),
+                  title: const Text('Export Watchlist'),
+                  subtitle: const Text(
+                    'Share a watchlist.json to another device (AirDrop, Messages, etc.)',
+                    style: AppTheme.metaStyle,
+                  ),
+                  onTap: () => _exportWatchlist(context),
+                ),
+                const Divider(height: 1, color: AppTheme.border),
+                ListTile(
+                  leading: const Icon(Icons.file_download_outlined, color: AppTheme.textSecondary),
+                  title: const Text('Import Watchlist'),
+                  subtitle: const Text(
+                    'Merges a watchlist.json received from another device into this one',
+                    style: AppTheme.metaStyle,
+                  ),
+                  onTap: () => _importWatchlist(context),
+                ),
+              ],
             ),
           ),
 
@@ -341,6 +366,78 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// "Export Watchlist" (Settings > Library) - shares the current watchlist
+/// as a JSON file via the native share sheet. A quick empty-list check
+/// avoids popping the whole share sheet for a file with nothing in it.
+Future<void> _exportWatchlist(BuildContext context) async {
+  final watchlist = context.read<WatchlistProvider>();
+  final messenger = ScaffoldMessenger.of(context);
+  if (watchlist.items.isEmpty) {
+    messenger.showSnackBar(const SnackBar(content: Text("Your watchlist is empty - nothing to export.")));
+    return;
+  }
+  try {
+    final shared = await WatchlistBackupService().exportAndShare(
+      watchlist.exportJson(),
+      sharePositionOrigin: _shareOrigin(context),
+    );
+    if (!shared) return; // user dismissed the share sheet - not an error
+    if (!context.mounted) return;
+    messenger.showSnackBar(SnackBar(content: Text("Exported ${watchlist.items.length} title(s).")));
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text("Couldn't export the watchlist: $e")));
+  }
+}
+
+/// macOS and iPad's native share popover requires a non-zero anchor rect
+/// (in the source view's coordinate space) or it throws a
+/// PlatformException instead of opening - phones ignore this entirely.
+/// This screen doesn't wire a GlobalKey to the tapped tile, so the best
+/// available anchor is this screen's own render box (roughly the visible
+/// content area) rather than the exact tile position; that's still a
+/// valid, non-zero rect, which is all the platform actually requires.
+Rect? _shareOrigin(BuildContext context) {
+  final box = context.findRenderObject() as RenderBox?;
+  if (box == null || !box.hasSize || box.size.isEmpty) return null;
+  return box.localToGlobal(Offset.zero) & box.size;
+}
+
+/// "Import Watchlist" (Settings > Library) - reads a watchlist.json file
+/// the user picks and merges it into this device's watchlist. See
+/// [WatchlistProvider.importAndMerge] for the merge rule (nothing existing
+/// is ever removed; matching titles stay as one entry; missing ones are
+/// added).
+Future<void> _importWatchlist(BuildContext context) async {
+  final messenger = ScaffoldMessenger.of(context);
+  String? raw;
+  try {
+    raw = await WatchlistBackupService().pickAndReadJson();
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text("Couldn't read that file: $e")));
+    return;
+  }
+  if (raw == null) return; // user cancelled the picker
+  if (!context.mounted) return;
+
+  final watchlist = context.read<WatchlistProvider>();
+  try {
+    final incoming = watchlist.parseImportJson(raw);
+    final result = await watchlist.importAndMerge(incoming);
+    if (!context.mounted) return;
+    final suffix = result.alreadyPresent > 0
+        ? ' - ${result.alreadyPresent} were already in your watchlist.'
+        : '.';
+    final message = result.added == 0
+        ? "Nothing new - all ${result.total} title(s) in that file are already in your watchlist."
+        : "Added ${result.added} new title(s)$suffix";
+    messenger.showSnackBar(SnackBar(content: Text(message)));
+  } on FormatException catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text(e.message)));
+  } catch (e) {
+    messenger.showSnackBar(SnackBar(content: Text("Couldn't import that file: $e")));
   }
 }
 
