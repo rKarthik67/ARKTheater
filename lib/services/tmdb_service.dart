@@ -114,25 +114,85 @@ class TmdbService {
   /// Title search scoped to movies - powers the Search screen's Movies tab.
   Future<List<MediaItem>> searchMovies(String query, {int page = 1}) async {
     if (query.trim().isEmpty) return [];
-    final res = await _dio.get('/search/movie', queryParameters: {
-      ..._auth,
-      'query': query,
-      'include_adult': false,
-      'page': page,
-    });
-    return _mapResults(res.data, MediaType.movie);
+    final results = await Future.wait([
+      _titleSearch('/search/movie', query, MediaType.movie, page),
+      _keywordDiscover(query, MediaType.movie, page),
+    ]);
+    return _mergeSearchResults(results[0], results[1]);
   }
 
-  /// Title search scoped to TV shows - powers the Search screen's TV tab.
   Future<List<MediaItem>> searchTV(String query, {int page = 1}) async {
     if (query.trim().isEmpty) return [];
-    final res = await _dio.get('/search/tv', queryParameters: {
+    final results = await Future.wait([
+      _titleSearch('/search/tv', query, MediaType.tv, page),
+      _keywordDiscover(query, MediaType.tv, page),
+    ]);
+    return _mergeSearchResults(results[0], results[1]);
+  }
+
+  Future<List<MediaItem>> _titleSearch(
+    String path,
+    String query,
+    MediaType type,
+    int page,
+  ) async {
+    final res = await _dio.get(path, queryParameters: {
       ..._auth,
       'query': query,
       'include_adult': false,
       'page': page,
     });
-    return _mapResults(res.data, MediaType.tv);
+    return _mapResults(res.data, type);
+  }
+
+  /// Finds TMDB's closest keyword (e.g. "zombie") and discovers titles
+  /// tagged with it. A failed/missing keyword must never make normal title
+  /// search fail, so this deliberately returns an empty secondary result.
+  Future<List<MediaItem>> _keywordDiscover(
+    String query,
+    MediaType type,
+    int page,
+  ) async {
+    try {
+      final keywords = await _dio.get('/search/keyword', queryParameters: {
+        ..._auth,
+        'query': query,
+        'page': 1,
+      });
+      final options = (keywords.data['results'] as List? ?? [])
+          .whereType<Map>()
+          .map((value) => Map<String, dynamic>.from(value))
+          .toList();
+      if (options.isEmpty) return [];
+      final normalized = query.trim().toLowerCase();
+      final keyword = options.firstWhere(
+        (option) => option['name']?.toString().toLowerCase() == normalized,
+        orElse: () => options.first,
+      );
+      final id = (keyword['id'] as num?)?.toInt();
+      if (id == null) return [];
+      final path = type == MediaType.movie ? '/discover/movie' : '/discover/tv';
+      final discovered = await _dio.get(path, queryParameters: {
+        ..._auth,
+        'with_keywords': id,
+        'include_adult': false,
+        'page': page,
+        'sort_by': 'popularity.desc',
+      });
+      return _mapResults(discovered.data, type);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  List<MediaItem> _mergeSearchResults(
+    List<MediaItem> titleResults,
+    List<MediaItem> keywordResults,
+  ) {
+    final ids = <int>{};
+    return [...titleResults, ...keywordResults]
+        .where((item) => ids.add(item.id))
+        .toList();
   }
 
   /// Person search - powers the Search screen's People tab.
