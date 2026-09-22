@@ -1,3 +1,6 @@
+// widgets.dart re-exports TargetPlatform but NOT kIsWeb or
+// defaultTargetPlatform, so those need foundation explicitly.
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
