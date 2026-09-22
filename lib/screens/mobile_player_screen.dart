@@ -283,8 +283,11 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
         errorBuilder: (context, errorMessage) => _PlaybackErrorView(
           message: errorMessage ?? 'Playback failed',
           hasOtherProviders: widget.providers.length > 1,
-          onTryAnotherSource: () =>
-              _switchProvider((_providerIndex + 1) % widget.providers.length),
+          // Opens the provider drawer instead of blindly jumping to the
+          // next provider in the list: when a source fails, the next one
+          // along is no likelier to work than any other, and silently
+          // hopping one-by-one gives no sense of what else is available.
+          onTryAnotherSource: _showProviderSwitcher,
           onWatchEmbedded: _openWebViewFallback,
         ),
       ),
@@ -847,8 +850,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                 _PlaybackErrorView(
                   message: _fatalError!,
                   hasOtherProviders: widget.providers.length > 1,
-                  onTryAnotherSource: () =>
-                      _switchProvider((_providerIndex + 1) % widget.providers.length),
+                  onTryAnotherSource: _showProviderSwitcher,
                   onWatchEmbedded: _openWebViewFallback,
                 ),
                 Positioned(
@@ -907,8 +909,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                       children: [
                         if (widget.providers.length > 1)
                           ElevatedButton(
-                            onPressed: () =>
-                                _switchProvider((_providerIndex + 1) % widget.providers.length),
+                            onPressed: _showProviderSwitcher,
                             child: const Text('Try another source'),
                           ),
                         OutlinedButton(

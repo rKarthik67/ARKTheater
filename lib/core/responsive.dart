@@ -1,5 +1,3 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
@@ -75,7 +73,10 @@ class Responsive {
   /// platform, and on any error talking to the platform channel, so a
   /// missing/failed channel never blocks app startup.
   static Future<void> initDeviceType() async {
-    if (!Platform.isAndroid) return;
+    // defaultTargetPlatform rather than dart:io's Platform: dart:io does
+    // not exist on web at all, and merely importing it breaks a web
+    // compile even behind a runtime guard.
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) return;
     try {
       final result = await _deviceTypeChannel.invokeMethod<bool>('isTv');
       isTv = result ?? false;

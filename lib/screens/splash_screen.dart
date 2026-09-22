@@ -1,12 +1,11 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:media_kit/media_kit.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../core/theme.dart';
+import '../utils/platform_files.dart';
 
 /// First screen shown on cold start - an animated reveal of the ARK Theatre
 /// logo (fade-in, scale-up, then a diagonal light sweep) with a short chime,
@@ -72,15 +71,17 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   Future<void> _playChime() async {
     try {
       final data = await rootBundle.load('assets/audio/splash_chime.wav');
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/ark_splash_chime.wav');
-      await file.writeAsBytes(
+      final path = await writeTempBytes(
+        'ark_splash_chime.wav',
         data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-        flush: true,
       );
+      // Web has no temp directory to stage the clip in, so the splash just
+      // plays silently there - same graceful degradation as a missing or
+      // blocked audio backend (see the catch below).
+      if (path == null) return;
       final player = Player();
       _chimePlayer = player;
-      await player.open(Media(file.path));
+      await player.open(Media(path));
       await player.play();
     } catch (_) {
       // The animation never depends on sound succeeding - a missing/blocked

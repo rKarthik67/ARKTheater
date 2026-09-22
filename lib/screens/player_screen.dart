@@ -1,6 +1,4 @@
-import 'dart:io' show Platform;
-
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../models/media_item.dart';
@@ -46,10 +44,15 @@ class PlayerScreen extends StatelessWidget {
   final int initialProviderIndex;
   final ProviderLoadResult initialResult;
 
+  // defaultTargetPlatform instead of dart:io's Platform - dart:io isn't
+  // available on web, and the import alone fails a web compile even though
+  // every use here is already behind !kIsWeb.
   bool get _usesMobileEngine =>
-      !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+      !kIsWeb &&
+      (defaultTargetPlatform == TargetPlatform.android ||
+          defaultTargetPlatform == TargetPlatform.iOS);
 
-  bool get _usesMacosEngine => !kIsWeb && Platform.isMacOS;
+  bool get _usesMacosEngine => !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
 
   @override
   Widget build(BuildContext context) {

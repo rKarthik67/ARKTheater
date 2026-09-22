@@ -1,10 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' show Rect;
 
 import 'package:file_picker/file_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+
+import '../utils/platform_files.dart';
 
 /// File I/O for Settings > Library's "Export Watchlist" / "Import
 /// Watchlist" - the actual share-sheet / file-picker mechanics. The JSON
@@ -12,6 +13,11 @@ import 'package:share_plus/share_plus.dart';
 /// class only gets that JSON text onto and off of the filesystem so it can
 /// travel to another device.
 class WatchlistBackupService {
+  /// Stages the export as a real temp file where there's a filesystem, and
+  /// returns null on web so the caller can fall back to sharing bytes.
+  Future<String?> writeTempFileOrNull(String timestamp, String jsonText) =>
+      writeTempString('ark_theater_watchlist_$timestamp.json', jsonText);
+
   /// Writes [jsonText] to a temp file and opens the native share sheet
   /// (AirDrop, Messages, Mail, "Save to Files"/a cloud drive, etc. -
   /// whatever the OS offers) so the user can send the exported watchlist
@@ -24,15 +30,24 @@ class WatchlistBackupService {
   /// ignore it, so it's safe to omit there, but callers on every platform
   /// should pass one (see settings_screen.dart's `_shareOrigin`).
   Future<bool> exportAndShare(String jsonText, {Rect? sharePositionOrigin}) async {
-    final dir = await getTemporaryDirectory();
     // Colons aren't safe in filenames on every platform this app targets
     // (notably Windows), hence the swap below.
     final timestamp = DateTime.now().toIso8601String().replaceAll(RegExp(r'[:.]'), '-');
-    final file = File('${dir.path}/ark_theater_watchlist_$timestamp.json');
-    await file.writeAsString(jsonText);
+    final path = await writeTempFileOrNull(timestamp, jsonText);
+
+    // Web can't stage a temp file, so the JSON is handed to the share sheet
+    // as bytes instead of a path. Everywhere else keeps the real file, which
+    // is what makes "Save to Files"/a cloud drive offer a sensible filename.
+    final xFile = path != null
+        ? XFile(path, mimeType: 'application/json', name: 'ark_theater_watchlist.json')
+        : XFile.fromData(
+            Uint8List.fromList(utf8.encode(jsonText)),
+            mimeType: 'application/json',
+            name: 'ark_theater_watchlist.json',
+          );
 
     final result = await Share.shareXFiles(
-      [XFile(file.path, mimeType: 'application/json', name: 'ark_theater_watchlist.json')],
+      [xFile],
       subject: 'ARKTheater Watchlist',
       text: 'My ARKTheater watchlist - open this file with "Import Watchlist" in the '
           'app on another device to merge it in.',
@@ -63,7 +78,7 @@ class WatchlistBackupService {
     final bytes = picked.bytes;
     if (bytes != null) return utf8.decode(bytes);
     final path = picked.path;
-    if (path != null) return File(path).readAsString();
+    if (path != null) return readFileAsString(path);
     return null;
   }
 }
