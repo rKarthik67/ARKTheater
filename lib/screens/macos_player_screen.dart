@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -161,6 +162,11 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
   Timer? _stuckTimer;
   bool _showStuckHint = false;
   Duration _lastProgressPosition = Duration.zero;
+  static const _displayChannel = MethodChannel('ark_theater/display');
+  Timer? _gestureLabelTimer;
+  bool _controlsVisible = true;
+  double _brightness = 0.5;
+  String? _gestureLabel;
 
   SubtitleStyle _subtitleStyle = SubtitleStyle.defaultStyle;
   double _subtitleDelaySeconds = 0.0;
@@ -200,7 +206,38 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
     unawaited(_loadSubtitleDownloadHistory());
     unawaited(_loadSubtitleStyle());
     WakelockPlus.enable();
+    unawaited(_loadBrightness());
     _loadCurrentLink();
+  }
+
+  Future<void> _loadBrightness() async {
+    try {
+      final value = await _displayChannel.invokeMethod<double>('getBrightness');
+      if (mounted && value != null) setState(() => _brightness = value.clamp(0.0, 1.0).toDouble());
+    } catch (_) {}
+  }
+
+  void _showGestureLabel(String value) {
+    _gestureLabelTimer?.cancel();
+    setState(() => _gestureLabel = value);
+    _gestureLabelTimer = Timer(const Duration(milliseconds: 800), () {
+      if (mounted) setState(() => _gestureLabel = null);
+    });
+  }
+
+  void _adjustVerticalControl(DragUpdateDetails details, Size size) {
+    final delta = -details.delta.dy / size.height;
+    if (details.localPosition.dx < size.width / 2) {
+      _brightness = (_brightness + delta).clamp(0.0, 1.0).toDouble();
+      unawaited(_displayChannel.invokeMethod<void>('setBrightness', _brightness));
+      _showGestureLabel('Brightness ${(_brightness * 100).round()}%');
+    } else {
+      final controller = _controller;
+      if (controller == null) return;
+      final volume = (controller.value.volume + delta).clamp(0.0, 1.0).toDouble();
+      unawaited(controller.setVolume(volume));
+      _showGestureLabel('Volume ${(volume * 100).round()}%');
+    }
   }
 
   Future<void> _loadSubtitleDownloadHistory() async {
@@ -760,6 +797,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
 
   @override
   void dispose() {
+    _gestureLabelTimer?.cancel();
     _stuckTimer?.cancel();
     _positionSaveTimer?.cancel();
     final controller = _controller;
@@ -794,7 +832,17 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        appBar: AppBar(
+        // Keep this toolbar's height in the layout while its contents are
+        // hidden. Removing the AppBar changed the Scaffold body's height and
+        // visibly shifted the video down/up on every tap.
+        appBar: PreferredSize(
+          preferredSize: const Size.fromHeight(kToolbarHeight),
+          child: IgnorePointer(
+            ignoring: !_controlsVisible,
+            child: AnimatedOpacity(
+              opacity: _controlsVisible ? 1 : 0,
+              duration: const Duration(milliseconds: 160),
+              child: AppBar(
           backgroundColor: Colors.black,
           automaticallyImplyLeading: false,
           leading: IconButton(
@@ -887,6 +935,9 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                 ],
               ),
           ],
+              ),
+            ),
+          ),
         ),
         body: _error != null
             ? Center(
@@ -909,6 +960,14 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                         child: VideoPlayer(_controller!),
                       ),
                     ),
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () => setState(() => _controlsVisible = !_controlsVisible),
+                      onVerticalDragUpdate: (details) =>
+                          _adjustVerticalControl(details, MediaQuery.sizeOf(context)),
+                    ),
+                  ),
                   if (subtitleText != null && !_loading)
                     Positioned(
                       left: 24,
@@ -935,7 +994,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                         ),
                       ),
                     ),
-                  if (!_loading && !buffering && !_confirmingSeek)
+                  if (!_loading && !buffering && !_confirmingSeek && _controlsVisible)
                     Positioned(
                       left: 0,
                       right: 0,
@@ -1009,6 +1068,14 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                           ],
                         ),
                         ),
+                      ),
+                    ),
+                  if (_gestureLabel != null)
+                    Center(
+                      child: LiquidGlass(
+                        borderRadius: BorderRadius.circular(18),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        child: Text(_gestureLabel!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                       ),
                     ),
                   if (_loading || buffering || _confirmingSeek)

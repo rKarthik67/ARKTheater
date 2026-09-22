@@ -12,9 +12,10 @@ import 'mobile_player_screen.dart';
 /// - unchanged constructor shape from before this file was split. Picks the
 /// actual player implementation per platform:
 ///
-/// - Android/iOS: MobilePlayerScreen, built on better_player_plus (the same
-///   ExoPlayer/AVPlayer engine flixquest itself uses) - see that file's doc
-///   comment for why this matters for seek reliability on scraped sources.
+/// - Android: MobilePlayerScreen, built on better_player_plus/ExoPlayer.
+/// - iOS/iPadOS: AVPlayer (the same wrapper used on macOS) for HLS/MP4,
+///   which has the most reliable resume/seek behavior on Apple platforms;
+///   media_kit/libmpv only for MPEG-DASH, which AVPlayer cannot decode.
 /// - macOS: MacosPlayerScreen, built on video_player's AVPlayer backend -
 ///   the same underlying engine iOS uses, since media_kit/mpv was found to
 ///   hang indefinitely seeking on some scraped CDNs (see that file's doc
@@ -44,13 +45,18 @@ class PlayerScreen extends StatelessWidget {
   final int initialProviderIndex;
   final ProviderLoadResult initialResult;
 
-  // defaultTargetPlatform instead of dart:io's Platform - dart:io isn't
-  // available on web, and the import alone fails a web compile even though
-  // every use here is already behind !kIsWeb.
   bool get _usesMobileEngine =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS);
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+
+  bool get _usesIosEngine =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS;
+
+  bool get _iosSourceIsDash {
+    final primary = initialResult.videoLinks?.first;
+    if (primary == null) return false;
+    return primary.isDash == true ||
+        (primary.url ?? '').toLowerCase().contains('.mpd');
+  }
 
   bool get _usesMacosEngine => !kIsWeb && defaultTargetPlatform == TargetPlatform.macOS;
 
@@ -70,6 +76,33 @@ class PlayerScreen extends StatelessWidget {
     }
     if (_usesMacosEngine) {
       return MacosPlayerScreen(
+        title: title,
+        mediaType: mediaType,
+        tmdbId: tmdbId,
+        season: season,
+        episode: episode,
+        providers: providers,
+        initialProviderIndex: initialProviderIndex,
+        initialResult: initialResult,
+      );
+    }
+    if (_usesIosEngine) {
+      // AVPlayer matches the proven macOS path for normal Apple-compatible
+      // streams. Only hand DASH to libmpv because AVPlayer has no DASH
+      // demuxer at all.
+      if (!_iosSourceIsDash) {
+        return MacosPlayerScreen(
+          title: title,
+          mediaType: mediaType,
+          tmdbId: tmdbId,
+          season: season,
+          episode: episode,
+          providers: providers,
+          initialProviderIndex: initialProviderIndex,
+          initialResult: initialResult,
+        );
+      }
+      return DesktopPlayerScreen(
         title: title,
         mediaType: mediaType,
         tmdbId: tmdbId,

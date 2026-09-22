@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -103,6 +104,11 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
   StreamSubscription<bool>? _playingSub;
   Duration _lastProgressPosition = Duration.zero;
   Timer? _positionSaveTimer;
+  Timer? _gestureLabelTimer;
+  static const _displayChannel = MethodChannel('ark_theater/display');
+  bool _controlsVisible = true;
+  double _brightness = 0.5;
+  String? _gestureLabel;
 
   // Drives the custom seek bar - the default media_kit controls are turned
   // off (see `controls: NoVideoControls` below) because their built-in
@@ -186,6 +192,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
     _currentLink = _result.videoLinks!.first;
     _loadSubtitleDownloadHistory();
     _loadSubtitleStyle();
+    unawaited(_loadBrightness());
     _player = Player(
       configuration: const PlayerConfiguration(bufferSize: 64 * 1024 * 1024),
     );
@@ -264,6 +271,41 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
     _loadCurrentLink();
   }
 
+  Future<void> _loadBrightness() async {
+    try {
+      final value = await _displayChannel.invokeMethod<double>('getBrightness');
+      if (mounted && value != null) {
+        setState(() => _brightness = value.clamp(0.0, 1.0).toDouble());
+      }
+    } catch (_) {
+      // Brightness is an iOS-only enhancement; playback still works elsewhere.
+    }
+  }
+
+  void _toggleControls() => setState(() => _controlsVisible = !_controlsVisible);
+
+  void _showGestureLabel(String value) {
+    _gestureLabelTimer?.cancel();
+    setState(() => _gestureLabel = value);
+    _gestureLabelTimer = Timer(const Duration(milliseconds: 800), () {
+      if (mounted) setState(() => _gestureLabel = null);
+    });
+  }
+
+  void _adjustVerticalControl(DragUpdateDetails details, double width, double height) {
+    final delta = -details.delta.dy / height;
+    if (details.localPosition.dx < width / 2) {
+      _brightness = (_brightness + delta).clamp(0.0, 1.0).toDouble();
+      unawaited(_displayChannel.invokeMethod<void>('setBrightness', _brightness));
+      _showGestureLabel('Brightness ${(_brightness * 100).round()}%');
+    } else {
+      final volume =
+          (_player.state.volume + delta * 100).clamp(0.0, 100.0).toDouble();
+      unawaited(_player.setVolume(volume));
+      _showGestureLabel('Volume ${volume.round()}%');
+    }
+  }
+
   Future<void> _loadCurrentLink({Duration? resumeAt}) async {
     _stuckTimer?.cancel();
     _lastProgressPosition = Duration.zero;
@@ -302,18 +344,22 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
             season: widget.season,
             episode: widget.episode,
           );
+
+      // On iOS libmpv may accept a seek while its network demuxer is still
+      // opening, then apply the stream's initial 0:00 position afterwards.
+      // Start playback first, give the first media packet a moment to land,
+      // then use the same verified/retrying seek path as the timeline.
+      await _player.play();
+      _armStuckTimer();
       if (target != null && target > const Duration(seconds: 2)) {
-        await _player.seek(target);
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+        _watchSeek(target);
         if (fromStorage && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Resumed from ${_formatDuration(target)}')),
           );
         }
       }
-
-      await _player.play();
-
-      _armStuckTimer();
     } catch (err) {
       if (mounted) setState(() => _error = 'Playback failed: $err');
     } finally {
@@ -370,10 +416,17 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
       if (!mounted) return;
       setState(() {
         _seeking = false;
+        // A failed seek must always release the seek overlay. Leaving this
+        // true made the yellow loading indicator permanent after a CDN
+        // ignored a Range request and restarted at 0:00.
+        _confirmingSeek = false;
         if (landed) {
-          _confirmingSeek = false;
           _showStuckHint = false;
         } else {
+          // Do not leave the timeline at the requested-but-never-decoded
+          // position. Once the next position event arrives it will keep this
+          // value current as usual.
+          _position = _player.state.position;
           _showStuckHint = true;
         }
       });
@@ -431,6 +484,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
 
   @override
   void dispose() {
+    _gestureLabelTimer?.cancel();
     _stuckTimer?.cancel();
     _positionSaveTimer?.cancel();
     _errorSub?.cancel();
@@ -961,7 +1015,17 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                       ),
                     ),
                   ),
-                  if (!_loading && !_buffering)
+                  Positioned.fill(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: _toggleControls,
+                      onVerticalDragUpdate: (details) {
+                        final size = MediaQuery.sizeOf(context);
+                        _adjustVerticalControl(details, size.width, size.height);
+                      },
+                    ),
+                  ),
+                  if (!_loading && !_buffering && _controlsVisible)
                     Positioned(
                       left: 0,
                       right: 0,
@@ -1039,6 +1103,17 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                             ),
                           ],
                         ),
+                        ),
+                      ),
+                    ),
+                  if (_gestureLabel != null)
+                    Center(
+                      child: LiquidGlass(
+                        borderRadius: BorderRadius.circular(18),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        child: Text(
+                          _gestureLabel!,
+                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                         ),
                       ),
                     ),
