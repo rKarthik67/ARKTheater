@@ -220,3 +220,50 @@ flutter:
     - family: Great Vibes
       fonts:
         - asset: assets/fonts/GreatVibes-Regular.ttf
+    # Third wave: well-regarded, OFL-licensed families for the expanded
+    # Settings > Fonts & Colors catalog. Kept local for reliable offline UI.
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Variable.ttf
+    - family: Montserrat
+      fonts:
+        - asset: assets/fonts/Montserrat-Variable.ttf
+    - family: Lora
+      fonts:
+        - asset: assets/fonts/Lora-Variable.ttf
+    - family: Roboto
+      fonts:
+        - asset: assets/fonts/Roboto-Variable.ttf
+    - family: Noto Sans
+      fonts:
+        - asset: assets/fonts/NotoSans-Variable.ttf
+    - family: Raleway
+      fonts:
+        - asset: assets/fonts/Raleway-Variable.ttf
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-Variable.ttf
+    - family: Quicksand
+      fonts:
+        - asset: assets/fonts/Quicksand-Variable.ttf
+    - family: Rubik
+      fonts:
+        - asset: assets/fonts/Rubik-Variable.ttf
+    - family: Work Sans
+      fonts:
+        - asset: assets/fonts/WorkSans-Variable.ttf
+    - family: Source Sans 3
+      fonts:
+        - asset: assets/fonts/SourceSans3-Variable.ttf
+    - family: Josefin Sans
+      fonts:
+        - asset: assets/fonts/JosefinSans-Variable.ttf
+    - family: Libre Baskerville
+      fonts:
+        - asset: assets/fonts/LibreBaskerville-Variable.ttf
+    - family: Merriweather
+      fonts:
+        - asset: assets/fonts/Merriweather-Variable.ttf
+    - family: DM Sans
+      fonts:
+        - asset: assets/fonts/DMSans-Variable.ttf

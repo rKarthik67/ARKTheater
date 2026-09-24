@@ -20,22 +20,28 @@ library;
 
 import 'package:flutter/material.dart';
 
-/// The independently-customizable slots requested: section/row headers,
-/// general metadata/info text (year, runtime, genre chips, etc.), and
-/// cast & crew names on the detail screen.
-enum TextCategory { header, info, castDetails }
+/// Independently-customizable text roles used throughout the app.
+enum TextCategory { header, cardTitle, body, info, castDetails, button, navigation }
 
 extension TextCategoryLabel on TextCategory {
   String get label => switch (this) {
         TextCategory.header => 'Headers',
+        TextCategory.cardTitle => 'Poster & Card Titles',
+        TextCategory.body => 'Descriptions & Body Text',
         TextCategory.info => 'Info & Metadata Text',
         TextCategory.castDetails => 'Cast & Crew Details',
+        TextCategory.button => 'Buttons & Actions',
+        TextCategory.navigation => 'Navigation Labels',
       };
 
   String get description => switch (this) {
         TextCategory.header => 'Section titles like "Trending Now" and "Popular".',
+        TextCategory.cardTitle => 'Movie and show titles below posters and in result grids.',
+        TextCategory.body => 'Synopses, empty states, and other long-form app copy.',
         TextCategory.info => 'Year, runtime, genre chips, and similar metadata.',
         TextCategory.castDetails => 'Actor names under the cast row on a title\'s page.',
+        TextCategory.button => 'Primary, outlined, and text button labels.',
+        TextCategory.navigation => 'Bottom navigation and TV navigation-rail labels.',
       };
 }
 
@@ -73,6 +79,23 @@ const List<AppFontChoice> kAppFontChoices = [
   AppFontChoice('manrope', 'Manrope (Bright Modern Sans)', 'Manrope', previewWeight: FontWeight.w600),
   AppFontChoice('outfit', 'Outfit (Geometric Sans)', 'Outfit', previewWeight: FontWeight.w600),
   AppFontChoice('poppins', 'Poppins (Rounded Geometric Sans)', 'Poppins', previewWeight: FontWeight.w600),
+
+  // --- Popular contemporary additions ---
+  AppFontChoice('inter', 'Inter (Clean UI Sans)', 'Inter', previewWeight: FontWeight.w600),
+  AppFontChoice('montserrat', 'Montserrat (Modern Geometric)', 'Montserrat', previewWeight: FontWeight.w600),
+  AppFontChoice('lora', 'Lora (Warm Editorial Serif)', 'Lora'),
+  AppFontChoice('roboto', 'Roboto (Classic UI Sans)', 'Roboto', previewWeight: FontWeight.w500),
+  AppFontChoice('noto_sans', 'Noto Sans (Highly Legible Sans)', 'Noto Sans', previewWeight: FontWeight.w500),
+  AppFontChoice('raleway', 'Raleway (Elegant Geometric)', 'Raleway', previewWeight: FontWeight.w600),
+  AppFontChoice('nunito', 'Nunito (Friendly Rounded Sans)', 'Nunito', previewWeight: FontWeight.w600),
+  AppFontChoice('quicksand', 'Quicksand (Soft Rounded Sans)', 'Quicksand', previewWeight: FontWeight.w600),
+  AppFontChoice('rubik', 'Rubik (Readable Rounded Sans)', 'Rubik', previewWeight: FontWeight.w500),
+  AppFontChoice('work_sans', 'Work Sans (Practical Sans)', 'Work Sans', previewWeight: FontWeight.w500),
+  AppFontChoice('source_sans_3', 'Source Sans 3 (Humanist Sans)', 'Source Sans 3', previewWeight: FontWeight.w600),
+  AppFontChoice('josefin_sans', 'Josefin Sans (Art-Deco Sans)', 'Josefin Sans', previewWeight: FontWeight.w600),
+  AppFontChoice('libre_baskerville', 'Libre Baskerville (Classic Serif)', 'Libre Baskerville'),
+  AppFontChoice('merriweather', 'Merriweather (Screen Serif)', 'Merriweather', previewWeight: FontWeight.w600),
+  AppFontChoice('dm_sans', 'DM Sans (Modern Neutral Sans)', 'DM Sans', previewWeight: FontWeight.w500),
 
   // --- Script ---
   AppFontChoice('great_vibes', 'Great Vibes (Flowing Script)', 'Great Vibes'),

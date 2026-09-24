@@ -181,6 +181,17 @@ class AppTheme {
     );
   }
 
+  static TextStyle _configuredStyle(TextStyle base, SettingsProvider? settings, TextCategory category) {
+    final font = settings?.fontChoiceFor(category);
+    final color = settings?.fontColorFor(category);
+    if (font == null && color == null) return base;
+    return base.copyWith(
+      fontFamily: font?.fontFamily,
+      fontWeight: font != null ? FontWeight.w500 : base.fontWeight,
+      color: color ?? base.color,
+    );
+  }
+
   /// The live accent color: the user's Settings > App Theme choice if set,
   /// otherwise [accent].
   static Color resolvedAccent(BuildContext context) {
@@ -216,13 +227,37 @@ class AppTheme {
   /// widgets elsewhere in the app paint with the [accent] constant
   /// directly rather than through Theme.of(context) and won't repaint
   /// from this - see the Settings screen's "App Theme" section note.
-  static ThemeData themeFor({Color accentColor = accent}) {
+  static ThemeData themeFor({Color accentColor = accent, SettingsProvider? settings}) {
     final base = ThemeData.dark(useMaterial3: true);
-    final textTheme = _textTheme(base.textTheme).apply(
+    final defaultTextTheme = _textTheme(base.textTheme).apply(
       bodyColor: textPrimary,
       displayColor: textPrimary,
     );
-    const buttonTextStyle = TextStyle(fontFamily: sansFont, fontWeight: FontWeight.w600);
+    final bodyStyle = _configuredStyle(
+      const TextStyle(fontFamily: sansFont, color: textPrimary),
+      settings,
+      TextCategory.body,
+    );
+    final textTheme = defaultTextTheme.copyWith(
+      bodyLarge: defaultTextTheme.bodyLarge?.merge(bodyStyle),
+      bodyMedium: defaultTextTheme.bodyMedium?.merge(bodyStyle),
+      bodySmall: defaultTextTheme.bodySmall?.merge(bodyStyle),
+    );
+    final buttonTextStyle = _configuredStyle(
+      const TextStyle(fontFamily: sansFont, fontWeight: FontWeight.w600),
+      settings,
+      TextCategory.button,
+    );
+    final selectedNavigationStyle = _configuredStyle(
+      TextStyle(fontFamily: sansFont, color: accentColor, fontWeight: FontWeight.w600),
+      settings,
+      TextCategory.navigation,
+    );
+    final unselectedNavigationStyle = _configuredStyle(
+      const TextStyle(fontFamily: sansFont, color: textSecondary),
+      settings,
+      TextCategory.navigation,
+    );
     final glow = accentColor.withOpacity(0.22);
 
     return base.copyWith(
@@ -284,16 +319,16 @@ class AppTheme {
         backgroundColor: Colors.transparent,
         selectedIconTheme: IconThemeData(color: accentColor),
         unselectedIconTheme: const IconThemeData(color: textSecondary),
-        selectedLabelTextStyle: TextStyle(fontFamily: sansFont, color: accentColor, fontWeight: FontWeight.w600),
-        unselectedLabelTextStyle: const TextStyle(fontFamily: sansFont, color: textSecondary),
+        selectedLabelTextStyle: selectedNavigationStyle,
+        unselectedLabelTextStyle: unselectedNavigationStyle,
       ),
       bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: Colors.transparent,
         elevation: 0,
         selectedItemColor: accentColor,
         unselectedItemColor: textSecondary,
-        selectedLabelStyle: const TextStyle(fontFamily: sansFont, fontWeight: FontWeight.w600),
-        unselectedLabelStyle: const TextStyle(fontFamily: sansFont),
+        selectedLabelStyle: selectedNavigationStyle,
+        unselectedLabelStyle: unselectedNavigationStyle,
       ),
       sliderTheme: SliderThemeData(
         activeTrackColor: accentColor,

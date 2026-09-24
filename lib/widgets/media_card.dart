@@ -44,9 +44,8 @@ class MediaCard extends StatelessWidget {
     final watchlist = context.watch<WatchlistProvider>();
     final isBookmarked = watchlist.contains(item.type, item.id);
 
-    return InkWell(
+    return _AnimatedCardTap(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -96,7 +95,9 @@ class MediaCard extends StatelessWidget {
                       height: 4,
                       color: Colors.white24,
                       alignment: Alignment.centerLeft,
-                      child: FractionallySizedBox(
+                      child: AnimatedFractionallySizedBox(
+                        duration: const Duration(milliseconds: 380),
+                        curve: Curves.easeOutCubic,
                         widthFactor: progress!.clamp(0.0, 1.0),
                         child: Container(color: AppTheme.accent),
                       ),
@@ -110,7 +111,7 @@ class MediaCard extends StatelessWidget {
             item.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: AppTheme.cardTitleStyle,
+            style: AppTheme.resolvedStyle(context, AppTheme.cardTitleStyle, TextCategory.cardTitle),
           ),
           if (subtitle != null)
             Text(
@@ -150,8 +151,43 @@ class _PosterIconButton extends StatelessWidget {
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.all(5),
-          child: Icon(icon, size: 15, color: color),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            transitionBuilder: (child, animation) => ScaleTransition(scale: animation, child: child),
+            child: Icon(icon, key: ValueKey(icon), size: 15, color: color),
+          ),
         ),
+      ),
+    );
+  }
+}
+
+/// A small press-scale response makes dense poster grids feel tactile while
+/// keeping the animation short enough not to delay navigation.
+class _AnimatedCardTap extends StatefulWidget {
+  const _AnimatedCardTap({required this.onTap, required this.child});
+
+  final VoidCallback onTap;
+  final Widget child;
+
+  @override
+  State<_AnimatedCardTap> createState() => _AnimatedCardTapState();
+}
+
+class _AnimatedCardTapState extends State<_AnimatedCardTap> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedScale(
+      scale: _pressed ? 0.96 : 1,
+      duration: const Duration(milliseconds: 120),
+      curve: Curves.easeOutCubic,
+      child: InkWell(
+        onTap: widget.onTap,
+        onHighlightChanged: (pressed) => setState(() => _pressed = pressed),
+        borderRadius: BorderRadius.circular(10),
+        child: widget.child,
       ),
     );
   }

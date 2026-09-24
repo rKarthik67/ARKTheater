@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import '../core/app_fonts.dart';
 import '../core/theme.dart';
 import '../models/media_item.dart';
 import '../screens/trailer_screen.dart';
@@ -113,7 +114,7 @@ class _HeroBannerState extends State<HeroBanner> {
                       item.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTheme.heroTitleStyle,
+                      style: AppTheme.resolvedStyle(context, AppTheme.heroTitleStyle, TextCategory.header),
                     ),
                     const SizedBox(height: 8),
                     if ((item.overview ?? '').isNotEmpty)
@@ -121,7 +122,7 @@ class _HeroBannerState extends State<HeroBanner> {
                         item.overview!,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTheme.heroOverviewStyle,
+                        style: AppTheme.resolvedStyle(context, AppTheme.heroOverviewStyle, TextCategory.body),
                       ),
                     const SizedBox(height: 14),
                     Row(

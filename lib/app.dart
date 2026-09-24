@@ -22,7 +22,10 @@ class ArkTheaterApp extends StatelessWidget {
     // accent color from Settings > App Theme - see AppTheme.themeFor().
     return Consumer<SettingsProvider>(
       builder: (context, settings, child) {
-        final theme = AppTheme.themeFor(accentColor: settings.accentColor ?? AppTheme.accent);
+        final theme = AppTheme.themeFor(
+          accentColor: settings.accentColor ?? AppTheme.accent,
+          settings: settings,
+        );
         return MaterialApp(
           title: 'ARKTheater',
           debugShowCheckedModeBanner: false,

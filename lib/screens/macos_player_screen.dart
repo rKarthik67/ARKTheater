@@ -172,6 +172,9 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
   double _subtitleDelaySeconds = 0.0;
   List<_SubtitleCue> _activeCues = const [];
   String? _activeSubtitleUrl;
+  // Alignment is normalized to the player bounds, so the selected placement
+  // continues to make sense if the iPad rotates during playback.
+  Alignment _subtitleAlignment = const Alignment(0, 0.72);
 
   Set<String> _downloadedSubtitleIds = const {};
   String? _lastDownloadedSubtitleId;
@@ -523,6 +526,16 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
     return _lookupSubtitleText(_activeCues, adjusted);
   }
 
+  void _moveSubtitle(DragUpdateDetails details, Size playerSize) {
+    if (playerSize.isEmpty) return;
+    setState(() {
+      _subtitleAlignment = Alignment(
+        (_subtitleAlignment.x + (details.delta.dx * 2 / playerSize.width)).clamp(-1.0, 1.0).toDouble(),
+        (_subtitleAlignment.y + (details.delta.dy * 2 / playerSize.height)).clamp(-1.0, 1.0).toDouble(),
+      );
+    });
+  }
+
   Future<void> _fetchExternalSubtitles(void Function(void Function()) setSheetState) async {
     try {
       final subs = widget.mediaType == MediaType.movie
@@ -832,9 +845,14 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        // Keep this toolbar's height in the layout while its contents are
-        // hidden. Removing the AppBar changed the Scaffold body's height and
-        // visibly shifted the video down/up on every tap.
+        // The player must be laid out against the complete display.  On
+        // iPad, reserving the AppBar's height moves the body's visual centre
+        // below the physical screen centre (and AVPlayer makes that especially
+        // noticeable with letterboxed video).  Keep the controls over the
+        // video instead of taking space away from it.
+        extendBodyBehindAppBar: true,
+        // The toolbar stays mounted while hidden, so toggling controls cannot
+        // cause a layout shift.
         appBar: PreferredSize(
           preferredSize: const Size.fromHeight(kToolbarHeight),
           child: IgnorePointer(
@@ -852,9 +870,20 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
           ),
           title: Text('${widget.title} · ${currentProvider.displayName}', overflow: TextOverflow.ellipsis),
           actions: [
+            // Keep AVPlayer's video load/buffer indicator unobtrusive: it
+            // belongs beside the subtitle control, not over the video.
+            if (_loading || buffering || _confirmingSeek)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                ),
+              ),
             IconButton(
               icon: const Icon(Icons.subtitles_outlined),
-              tooltip: 'Subtitles',
+              tooltip: 'Subtitles (drag active subtitles to move them)',
               onPressed: _showSubtitlesSheet,
             ),
             PopupMenuButton<double>(
@@ -954,11 +983,23 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                 alignment: Alignment.center,
                 children: [
                   if (_controller != null && _controller!.value.isInitialized)
-                    Center(
-                      child: AspectRatio(
-                        aspectRatio: _controller!.value.aspectRatio,
-                        child: VideoPlayer(_controller!),
-                      ),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final screenSize = constraints.biggest;
+                        final aspectRatio = _controller!.value.aspectRatio;
+                        final screenAspectRatio = screenSize.width / screenSize.height;
+                        final videoSize = screenAspectRatio > aspectRatio
+                            ? Size(screenSize.height * aspectRatio, screenSize.height)
+                            : Size(screenSize.width, screenSize.width / aspectRatio);
+
+                        return Center(
+                          child: SizedBox(
+                            width: videoSize.width,
+                            height: videoSize.height,
+                            child: VideoPlayer(_controller!),
+                          ),
+                        );
+                      },
                     ),
                   Positioned.fill(
                     child: GestureDetector(
@@ -969,27 +1010,32 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                     ),
                   ),
                   if (subtitleText != null && !_loading)
-                    Positioned(
-                      left: 24,
-                      right: 24,
-                      bottom: 84,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: _subtitleStyle.backgroundColor,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          subtitleText,
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            height: 1.4,
-                            fontSize: _subtitleStyle.fontSize,
-                            color: _subtitleStyle.fontColor,
-                            shadows: const [
-                              Shadow(color: Colors.black, blurRadius: 4),
-                              Shadow(color: Colors.black, blurRadius: 8),
-                            ],
+                    Align(
+                      alignment: _subtitleAlignment,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onPanUpdate: (details) => _moveSubtitle(details, MediaQuery.sizeOf(context)),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: _subtitleStyle.backgroundColor,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              subtitleText,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                height: 1.4,
+                                fontSize: _subtitleStyle.fontSize,
+                                color: _subtitleStyle.fontColor,
+                                shadows: const [
+                                  Shadow(color: Colors.black, blurRadius: 4),
+                                  Shadow(color: Colors.black, blurRadius: 8),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -1078,49 +1124,44 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                         child: Text(_gestureLabel!, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                       ),
                     ),
-                  if (_loading || buffering || _confirmingSeek)
+                  // Do not cover the iPad video with a spinner while AVPlayer
+                  // is starting, buffering, or seeking.  A stalled source is
+                  // still surfaced after the watchdog has enough evidence.
+                  if (_showStuckHint)
                     Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const CircularProgressIndicator(color: AppTheme.accent),
-                          if (_showStuckHint) ...[
-                            const SizedBox(height: 20),
-                            LiquidGlass(
-                              margin: const EdgeInsets.symmetric(horizontal: 32),
-                              borderRadius: BorderRadius.circular(16),
-                              opacity: 0.72,
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Text(
-                                    "This source is taking unusually long to start - it may be down.",
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(color: Colors.white70),
+                      child: LiquidGlass(
+                        margin: const EdgeInsets.symmetric(horizontal: 32),
+                        borderRadius: BorderRadius.circular(16),
+                        opacity: 0.72,
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text(
+                              "This source is taking unusually long to start - it may be down.",
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              alignment: WrapAlignment.center,
+                              children: [
+                                if (hasOtherProviders)
+                                  ElevatedButton(
+                                    onPressed: () => _switchProvider(
+                                      (_providerIndex + 1) % widget.providers.length,
+                                    ),
+                                    child: const Text('Try another source'),
                                   ),
-                                  const SizedBox(height: 12),
-                                  Wrap(
-                                    spacing: 8,
-                                    alignment: WrapAlignment.center,
-                                    children: [
-                                      if (hasOtherProviders)
-                                        ElevatedButton(
-                                          onPressed: () =>
-                                              _switchProvider((_providerIndex + 1) % widget.providers.length),
-                                          child: const Text('Try another source'),
-                                        ),
-                                      OutlinedButton(
-                                        onPressed: _openWebViewFallback,
-                                        child: const Text('Watch via embedded player'),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
+                                OutlinedButton(
+                                  onPressed: _openWebViewFallback,
+                                  child: const Text('Watch via embedded player'),
+                                ),
+                              ],
                             ),
                           ],
-                        ],
+                        ),
                       ),
                     ),
                 ],

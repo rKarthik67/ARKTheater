@@ -14,6 +14,7 @@ import '../video_providers/names.dart';
 import '../video_providers/provider_loader.dart';
 import '../video_providers/scraper_api.dart';
 import '../widgets/error_view.dart';
+import '../widgets/fade_in_on_scroll.dart';
 import '../widgets/loading_indicator.dart';
 import '../widgets/media_row.dart';
 import 'person_detail_screen.dart';
@@ -285,46 +286,55 @@ class _DetailScreenState extends State<DetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(detail.item.title, style: Theme.of(context).textTheme.headlineSmall),
+                      FadeInOnScroll(
+                        child: Text(detail.item.title, style: Theme.of(context).textTheme.headlineSmall),
+                      ),
                       const SizedBox(height: 6),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          if (detail.item.year.isNotEmpty) _Chip(detail.item.year),
-                          if (detail.runtimeMinutes != null)
-                            _Chip('${detail.runtimeMinutes}m'),
-                          _Chip('★ ${detail.item.voteAverage.toStringAsFixed(1)}', accent: true),
-                          for (final g in detail.genres.take(3)) _Chip(g),
-                        ],
+                      FadeInOnScroll(
+                        delay: const Duration(milliseconds: 55),
+                        child: Wrap(
+                          spacing: 8,
+                          children: [
+                            if (detail.item.year.isNotEmpty) _Chip(detail.item.year),
+                            if (detail.runtimeMinutes != null) _Chip('${detail.runtimeMinutes}m'),
+                            _Chip('★ ${detail.item.voteAverage.toStringAsFixed(1)}', accent: true),
+                            for (final g in detail.genres.take(3)) _Chip(g),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 16),
-                      Text(
-                        detail.item.overview ?? '',
-                        style: const TextStyle(color: AppTheme.textSecondary),
+                      FadeInOnScroll(
+                        delay: const Duration(milliseconds: 110),
+                        child: Text(
+                          detail.item.overview ?? '',
+                          style: const TextStyle(color: AppTheme.textSecondary),
+                        ),
                       ),
                       const SizedBox(height: 20),
-                      if (!isTv)
-                        ElevatedButton.icon(
-                          onPressed: _resolving ? null : () => _play(),
-                          icon: _resolving
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Icon(Icons.play_arrow),
-                          label: Text(_resolving ? (_resolvingStatus ?? 'Finding ad-free source...') : 'Play'),
-                        )
-                      else
-                        _SeasonEpisodePicker(
-                          seasons: detail.seasons,
-                          selectedSeason: _selectedSeason,
-                          episodes: _episodes,
-                          loadingEpisodes: _loadingEpisodes,
-                          resolving: _resolving,
-                          resolvingStatus: _resolvingStatus,
-                          onSeasonChanged: _onSeasonChanged,
-                          onPlayEpisode: (episode) => _play(season: _selectedSeason, episode: episode),
+                      FadeInOnScroll(
+                        delay: const Duration(milliseconds: 165),
+                        child: !isTv
+                            ? ElevatedButton.icon(
+                                onPressed: _resolving ? null : () => _play(),
+                                icon: _resolving
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                      )
+                                    : const Icon(Icons.play_arrow),
+                                label: Text(_resolving ? (_resolvingStatus ?? 'Finding ad-free source...') : 'Play'),
+                              )
+                            : _SeasonEpisodePicker(
+                                seasons: detail.seasons,
+                                selectedSeason: _selectedSeason,
+                                episodes: _episodes,
+                                loadingEpisodes: _loadingEpisodes,
+                                resolving: _resolving,
+                                resolvingStatus: _resolvingStatus,
+                                onSeasonChanged: _onSeasonChanged,
+                                onPlayEpisode: (episode) => _play(season: _selectedSeason, episode: episode),
+                              ),
                         ),
                     ],
                   ),
@@ -332,9 +342,11 @@ class _DetailScreenState extends State<DetailScreen> {
               ),
               if (detail.cast.isNotEmpty)
                 SliverToBoxAdapter(
-                  child: SizedBox(
-                    height: 150,
-                    child: ListView.separated(
+                  child: FadeInOnScroll(
+                    delay: const Duration(milliseconds: 80),
+                    child: SizedBox(
+                      height: 150,
+                      child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       itemCount: detail.cast.length,
@@ -376,11 +388,15 @@ class _DetailScreenState extends State<DetailScreen> {
                     ),
                   ),
                 ),
+              ),
               SliverToBoxAdapter(
-                child: MediaRow(
-                  title: 'Similar Titles',
-                  items: detail.similar,
-                  onItemTap: widget.onSelectRelated,
+                child: FadeInOnScroll(
+                  delay: const Duration(milliseconds: 80),
+                  child: MediaRow(
+                    title: 'Similar Titles',
+                    items: detail.similar,
+                    onItemTap: widget.onSelectRelated,
+                  ),
                 ),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 24)),
@@ -496,10 +512,14 @@ class _SeasonEpisodePicker extends StatelessWidget {
             children: [
               for (var i = 0; i < episodes.length; i++) ...[
                 if (i > 0) const SizedBox(height: 12),
-                _EpisodeRow(
-                  episode: episodes[i],
-                  enabled: !resolving,
-                  onTap: () => onPlayEpisode(episodes[i].episodeNumber),
+                FadeInOnScroll(
+                  colorSweep: false,
+                  delay: Duration(milliseconds: 28 * (i % 8)),
+                  child: _EpisodeRow(
+                    episode: episodes[i],
+                    enabled: !resolving,
+                    onTap: () => onPlayEpisode(episodes[i].episodeNumber),
+                  ),
                 ),
               ],
             ],

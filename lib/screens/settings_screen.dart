@@ -188,8 +188,8 @@ class SettingsScreen extends StatelessWidget {
                   const _CardHeader(icon: Icons.animation, title: 'Scroll Animations'),
                   const SizedBox(height: 6),
                   const Text(
-                    'Text and cards fade and lift into place as they scroll '
-                    'into view, sweeping in from the color below.',
+                    'Choose how posters, cards, and text enter as they '
+                    'scroll into view. You can still turn all motion off.',
                     style: AppTheme.metaStyle,
                   ),
                   SwitchListTile(
@@ -206,6 +206,38 @@ class SettingsScreen extends StatelessWidget {
                   ),
                   if (!settings.reduceMotion) ...[
                     const SizedBox(height: 4),
+                    const Text('Entrance style', style: AppTheme.cardTitleStyle),
+                    const SizedBox(height: 4),
+                    DropdownButtonFormField<EntranceAnimationStyle>(
+                      value: settings.entranceAnimationStyle,
+                      isExpanded: true,
+                      dropdownColor: AppTheme.surfaceVariant,
+                      decoration: InputDecoration(
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        filled: true,
+                        fillColor: AppTheme.surfaceVariant,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: AppTheme.border),
+                        ),
+                      ),
+                      items: [
+                        for (final style in EntranceAnimationStyle.values)
+                          DropdownMenuItem(
+                            value: style,
+                            child: Text(style.label),
+                          ),
+                      ],
+                      onChanged: settings.isLoaded
+                          ? (style) {
+                              if (style != null) settings.setEntranceAnimationStyle(style);
+                            }
+                          : null,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(settings.entranceAnimationStyle.description, style: AppTheme.metaStyle),
+                    const SizedBox(height: 14),
                     const Text('Animation sweep color', style: AppTheme.cardTitleStyle),
                     const SizedBox(height: 8),
                     _ColorSwatchRow(

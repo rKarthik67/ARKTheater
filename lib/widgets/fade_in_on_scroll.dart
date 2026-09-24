@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import '../core/theme.dart';
 import '../state/settings_provider.dart';
 
-/// Fades (and gently lifts) its child in the moment it scrolls into view,
+/// Animates its child into view using the user-selected entrance style,
 /// optionally sweeping its color from an accent tint into the text's own
 /// color as it arrives.
 ///
@@ -143,12 +143,29 @@ class _FadeInOnScrollState extends State<FadeInOnScroll> with SingleTickerProvid
             child: content,
           );
         }
+        final style = settings?.entranceAnimationStyle ?? EntranceAnimationStyle.fadeLift;
+        content = switch (style) {
+          EntranceAnimationStyle.fadeLift => Transform.translate(
+              offset: Offset(0, widget.offsetY * (1.0 - t)),
+              child: content,
+            ),
+          EntranceAnimationStyle.fade => content,
+          EntranceAnimationStyle.scale => Transform.scale(
+              scale: 0.94 + (0.06 * t),
+              child: content,
+            ),
+          EntranceAnimationStyle.slideLeft => Transform.translate(
+              offset: Offset(-widget.offsetY * 1.5 * (1.0 - t), 0),
+              child: content,
+            ),
+          EntranceAnimationStyle.slideRight => Transform.translate(
+              offset: Offset(widget.offsetY * 1.5 * (1.0 - t), 0),
+              child: content,
+            ),
+        };
         return Opacity(
           opacity: t,
-          child: Transform.translate(
-            offset: Offset(0, widget.offsetY * (1.0 - t)),
-            child: content,
-          ),
+          child: content,
         );
       },
     );

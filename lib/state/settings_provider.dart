@@ -3,6 +3,29 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/app_fonts.dart';
 
+/// Entrance effect shared by posters, cards, and text sections that use
+/// [FadeInOnScroll]. Kept separate from Reduce Motion so users can choose a
+/// preferred style without losing the accessibility off switch.
+enum EntranceAnimationStyle { fadeLift, fade, scale, slideLeft, slideRight }
+
+extension EntranceAnimationStyleDetails on EntranceAnimationStyle {
+  String get label => switch (this) {
+        EntranceAnimationStyle.fadeLift => 'Fade & lift',
+        EntranceAnimationStyle.fade => 'Fade',
+        EntranceAnimationStyle.scale => 'Scale in',
+        EntranceAnimationStyle.slideLeft => 'Slide from left',
+        EntranceAnimationStyle.slideRight => 'Slide from right',
+      };
+
+  String get description => switch (this) {
+        EntranceAnimationStyle.fadeLift => 'Gentle upward entrance.',
+        EntranceAnimationStyle.fade => 'A simple, subtle fade.',
+        EntranceAnimationStyle.scale => 'Grows softly into place.',
+        EntranceAnimationStyle.slideLeft => 'Moves in from the left edge.',
+        EntranceAnimationStyle.slideRight => 'Moves in from the right edge.',
+      };
+}
+
 /// App-wide UI settings that need to persist across launches and be
 /// readable from anywhere in the widget tree: the "Liquid Glass"
 /// transparency, the app accent/theme color, and per-category font family
@@ -16,6 +39,7 @@ class SettingsProvider extends ChangeNotifier {
   static const _textScaleKey = 'settings_text_scale';
   static const _watchRegionKey = 'settings_watch_region';
   static const _scrollAnimationColorKey = 'settings_scroll_animation_color';
+  static const _entranceAnimationStyleKey = 'settings_entrance_animation_style';
 
   /// Multiplies every [LiquidGlass] surface's base opacity/tint. 1.0 is the
   /// app's original, heavier frosted look; lower values push toward a very
@@ -78,6 +102,9 @@ class SettingsProvider extends ChangeNotifier {
   Color? _scrollAnimationColor;
   Color? get scrollAnimationColor => _scrollAnimationColor;
 
+  EntranceAnimationStyle _entranceAnimationStyle = EntranceAnimationStyle.fadeLift;
+  EntranceAnimationStyle get entranceAnimationStyle => _entranceAnimationStyle;
+
   bool _isLoaded = false;
   bool get isLoaded => _isLoaded;
 
@@ -102,6 +129,11 @@ class SettingsProvider extends ChangeNotifier {
       _watchRegion = prefs.getString(_watchRegionKey) ?? 'IN';
       final scrollColor = prefs.getInt(_scrollAnimationColorKey);
       if (scrollColor != null) _scrollAnimationColor = Color(scrollColor);
+      final animationStyle = prefs.getString(_entranceAnimationStyleKey);
+      _entranceAnimationStyle = EntranceAnimationStyle.values.firstWhere(
+        (style) => style.name == animationStyle,
+        orElse: () => EntranceAnimationStyle.fadeLift,
+      );
       for (final category in TextCategory.values) {
         final fontId = prefs.getString('$_fontFamilyKeyPrefix${category.name}');
         if (fontId != null) _categoryFontId[category] = fontId;
@@ -228,6 +260,18 @@ class SettingsProvider extends ChangeNotifier {
       } else {
         await prefs.setInt(_scrollAnimationColorKey, color.value);
       }
+    } catch (_) {
+      // Best-effort persistence.
+    }
+  }
+
+  Future<void> setEntranceAnimationStyle(EntranceAnimationStyle style) async {
+    if (style == _entranceAnimationStyle) return;
+    _entranceAnimationStyle = style;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_entranceAnimationStyleKey, style.name);
     } catch (_) {
       // Best-effort persistence.
     }
