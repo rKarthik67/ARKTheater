@@ -18,6 +18,14 @@ class WatchlistScreen extends StatefulWidget {
 
 class _WatchlistScreenState extends State<WatchlistScreen> {
   MediaType _mediaType = MediaType.movie;
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +33,14 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
     final items = watchlist.items;
     final movies = items.where((i) => i.type == MediaType.movie).toList();
     final tvShows = items.where((i) => i.type == MediaType.tv).toList();
-    final shown = _mediaType == MediaType.movie ? movies : tvShows;
+    final selected = _mediaType == MediaType.movie ? movies : tvShows;
+    final query = _query.trim().toLowerCase();
+    final shown = query.isEmpty
+        ? selected
+        : selected.where((item) {
+            return item.title.toLowerCase().contains(query) ||
+                item.year.contains(query);
+          }).toList();
 
     return Scaffold(
       appBar: AppBar(title: const Text('My Watchlist')),
@@ -67,11 +82,41 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                         ),
                       ),
                     ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                      child: TextField(
+                        controller: _searchController,
+                        onChanged: (value) => setState(() => _query = value),
+                        textInputAction: TextInputAction.search,
+                        decoration: InputDecoration(
+                          hintText: 'Search your watchlist',
+                          prefixIcon: const Icon(Icons.search),
+                          suffixIcon: _query.isEmpty
+                              ? null
+                              : IconButton(
+                                  tooltip: 'Clear search',
+                                  icon: const Icon(Icons.clear),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() => _query = '');
+                                  },
+                                ),
+                          filled: true,
+                          fillColor: AppTheme.surfaceVariant,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: AppTheme.border),
+                          ),
+                        ),
+                      ),
+                    ),
                     Expanded(
                       child: shown.isEmpty
                           ? Center(
                               child: Text(
-                                _mediaType == MediaType.movie
+                                query.isNotEmpty
+                                    ? 'No matching titles in your watchlist.'
+                                    : _mediaType == MediaType.movie
                                     ? 'No movies in your watchlist yet.'
                                     : 'No TV shows in your watchlist yet.',
                                 style: const TextStyle(color: AppTheme.textSecondary),

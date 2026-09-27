@@ -20,13 +20,12 @@ Future<void> main() async {
   // nav bar (phones/tablets/desktop) split.
   await Responsive.initDeviceType();
 
-  // Loads TMDB_API_KEY / SCRAPER_BASE_URL from .env. If the file is missing
-  // (fresh checkout before `cp .env.example .env`), fall back to defaults
-  // baked into AppConfig instead of crashing.
+  // Loads API keys from .env. Stream-source selection is stored separately
+  // in Settings so it can safely switch between the two supported servers.
   try {
     await dotenv.load(fileName: '.env');
     // ignore: avoid_print
-    print('[ARKTheater] .env loaded OK. SCRAPER_BASE_URL=' + (dotenv.env['SCRAPER_BASE_URL'] ?? '(not set)'));
+    print('[ARKTheater] .env loaded OK.');
   } catch (err) {
     // ignore: avoid_print
     print('[ARKTheater] .env FAILED TO LOAD: ' + err.toString() + ' (falling back to AppConfig defaults)');

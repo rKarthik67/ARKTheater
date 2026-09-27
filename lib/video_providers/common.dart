@@ -38,6 +38,26 @@ class RegularVideoLinks {
   }
 }
 
+/// Providers expose the selected dub in their server label. Keep the parsing
+/// in one place so every player surface can offer the same audio switcher.
+String audioLabelForLink(RegularVideoLinks link) {
+  final server = (link.server ?? '').trim();
+  if (server.startsWith('VidSync |')) {
+    final parts = server.split('|').map((part) => part.trim()).toList();
+    if (parts.length >= 3 && parts[2].isNotEmpty) return parts[2];
+  }
+  if (server.startsWith('Castle ·')) {
+    final label = server.substring('Castle ·'.length).trim();
+    if (label.isNotEmpty) return label;
+  }
+  if (server.startsWith('Kisskh |')) return 'Original audio';
+  return 'Default';
+}
+
+List<String> audioLabelsForLinks(List<RegularVideoLinks> links) {
+  return links.map(audioLabelForLink).toSet().toList();
+}
+
 class RegularSubtitleLinks {
   String? url;
   String? language;

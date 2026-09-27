@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/app_fonts.dart';
+import '../core/config.dart';
 
 /// Entrance effect shared by posters, cards, and text sections that use
 /// [FadeInOnScroll]. Kept separate from Reduce Motion so users can choose a
@@ -40,6 +41,7 @@ class SettingsProvider extends ChangeNotifier {
   static const _watchRegionKey = 'settings_watch_region';
   static const _scrollAnimationColorKey = 'settings_scroll_animation_color';
   static const _entranceAnimationStyleKey = 'settings_entrance_animation_style';
+  static const _scraperBaseUrlKey = 'settings_scraper_base_url';
 
   /// Multiplies every [LiquidGlass] surface's base opacity/tint. 1.0 is the
   /// app's original, heavier frosted look; lower values push toward a very
@@ -105,6 +107,9 @@ class SettingsProvider extends ChangeNotifier {
   EntranceAnimationStyle _entranceAnimationStyle = EntranceAnimationStyle.fadeLift;
   EntranceAnimationStyle get entranceAnimationStyle => _entranceAnimationStyle;
 
+  String _scraperBaseUrl = AppConfig.oracleScraperBaseUrl;
+  String get scraperBaseUrl => _scraperBaseUrl;
+
   bool _isLoaded = false;
   bool get isLoaded => _isLoaded;
 
@@ -127,6 +132,11 @@ class SettingsProvider extends ChangeNotifier {
       final scale = prefs.getDouble(_textScaleKey);
       if (scale != null) _textScale = scale.clamp(minTextScale, maxTextScale);
       _watchRegion = prefs.getString(_watchRegionKey) ?? 'IN';
+      final savedScraperUrl = prefs.getString(_scraperBaseUrlKey);
+      if (savedScraperUrl == AppConfig.vercelScraperBaseUrl) {
+        _scraperBaseUrl = AppConfig.vercelScraperBaseUrl;
+      }
+      AppConfig.setScraperBaseUrl(_scraperBaseUrl);
       final scrollColor = prefs.getInt(_scrollAnimationColorKey);
       if (scrollColor != null) _scrollAnimationColor = Color(scrollColor);
       final animationStyle = prefs.getString(_entranceAnimationStyleKey);
@@ -248,6 +258,25 @@ class SettingsProvider extends ChangeNotifier {
       // Best-effort persistence.
     }
   }
+
+  Future<void> setScraperBaseUrl(String value) async {
+    final next = value == AppConfig.vercelScraperBaseUrl
+        ? AppConfig.vercelScraperBaseUrl
+        : AppConfig.oracleScraperBaseUrl;
+    if (next == _scraperBaseUrl) return;
+    _scraperBaseUrl = next;
+    AppConfig.setScraperBaseUrl(next);
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_scraperBaseUrlKey, next);
+    } catch (_) {
+      // The selected endpoint remains active for this session.
+    }
+  }
+
+  Future<void> resetScraperBaseUrl() =>
+      setScraperBaseUrl(AppConfig.oracleScraperBaseUrl);
 
   /// Pass `null` for a plain fade with no color sweep.
   Future<void> setScrollAnimationColor(Color? color) async {
