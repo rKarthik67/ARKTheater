@@ -91,6 +91,15 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
   late int _providerIndex;
   late ProviderLoadResult _result;
 
+  /// The video link currently open in the player.
+  ///
+  /// Unlike the desktop player, mobile doesn't re-open the player to change
+  /// quality - better_player_plus handles that internally through the
+  /// `resolutions` map built in _openCurrentResult. This is only needed for
+  /// the audio switcher, which has to open a genuinely different URL, so it
+  /// stays null until the first source opens.
+  RegularVideoLinks? _currentLink;
+
   bool _loading = true;
   bool _switchingProvider = false;
   String? _fatalError;
@@ -321,7 +330,15 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
       return;
     }
 
-    final primary = links.first;
+    // Honour an explicit audio-track pick (see _switchQuality) for as long
+    // as that exact link still exists in this result. After a provider
+    // switch the old URL is gone from the new provider's list, so this
+    // falls back to the first link on its own - no reset needed.
+    final primary = links.firstWhere(
+      (link) => link.url != null && link.url == _currentLink?.url,
+      orElse: () => links.first,
+    );
+    _currentLink = primary;
     final resolutions = <String, String>{
       for (final link in links)
         if (link.url != null) (link.quality ?? 'auto'): link.url!,
@@ -567,9 +584,26 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     );
   }
 
+  /// Re-opens the player on a different link, keeping the current position.
+  ///
+  /// The subtitle sync offset is deliberately NOT preserved: this builds a
+  /// fresh data source, and any offset dialed in was for the previous
+  /// subtitle file (the same reasoning _openCurrentResult spells out for a
+  /// provider/quality switch).
+  void _switchQuality(RegularVideoLinks link) {
+    if (link.url == null || link.url == _currentLink?.url) return;
+    final resumePosition = _controller?.videoPlayerController?.value.position;
+    setState(() => _currentLink = link);
+    unawaited(_openCurrentResult(resumeAt: resumePosition));
+  }
+
   void _showAudioSwitcher() {
     final links = _result.videoLinks ?? const [];
     final labels = audioLabelsForLinks(links);
+    // _currentLink is set the moment a source opens, but fall back to the
+    // first link so the sheet still renders a sensible selection if it's
+    // somehow opened before then.
+    final current = _currentLink ?? (links.isEmpty ? null : links.first);
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -584,13 +618,17 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
               for (final label in labels)
                 ListTile(
                   leading: Icon(
-                    audioLabelForLink(_currentLink) == label ? Icons.radio_button_checked : Icons.radio_button_off,
-                    color: audioLabelForLink(_currentLink) == label ? AppTheme.accent : Colors.white54,
+                    current != null && audioLabelForLink(current) == label
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_off,
+                    color: current != null && audioLabelForLink(current) == label
+                        ? AppTheme.accent
+                        : Colors.white54,
                   ),
                   title: Text(label, style: const TextStyle(color: Colors.white)),
                   onTap: () {
                     final sameQuality = links.where((link) =>
-                        audioLabelForLink(link) == label && link.quality == _currentLink.quality);
+                        audioLabelForLink(link) == label && link.quality == current?.quality);
                     final next = sameQuality.isNotEmpty
                         ? sameQuality.first
                         : links.firstWhere((link) => audioLabelForLink(link) == label);
