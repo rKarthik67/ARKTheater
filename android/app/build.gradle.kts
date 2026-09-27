@@ -10,6 +10,19 @@ android {
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
+    // lintVitalAnalyzeRelease runs a static-analysis pass over release
+    // builds and produces nothing that ends up in the APK. On Windows it
+    // repeatedly failed the whole build with
+    // "The process cannot access the file because it is being used by
+    // another process" on its own lint-cache jars - a stale Gradle daemon
+    // or antivirus still holding a handle. Turning it off removes that
+    // failure mode (and a chunk of build time); run `flutter analyze` for
+    // real code analysis instead, which is faster and platform-neutral.
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
