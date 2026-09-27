@@ -12,6 +12,7 @@ import '../state/settings_provider.dart';
 import '../state/watchlist_provider.dart';
 import '../widgets/fade_in_on_scroll.dart';
 import 'platforms_screen.dart' show kWatchRegions;
+import 'stream_sources_screen.dart';
 import 'watchlist_screen.dart';
 
 /// App version, shown in About. Kept in sync by hand with pubspec.yaml's
@@ -24,17 +25,41 @@ const _kAppVersion = '1.0.0';
 /// than disappearing, alongside every app-wide preference: glass
 /// transparency, accent color, per-category fonts and colors, text size,
 /// scroll animations, the default watch region, and data housekeeping.
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key, required this.onSelect});
 
   final void Function(MediaItem) onSelect;
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  int _settingsTitleTaps = 0;
+  bool _showStreamSources = false;
+
+  void _handleSettingsTitleTap() {
+    if (_showStreamSources) return;
+    _settingsTitleTaps++;
+    if (_settingsTitleTaps < 3) return;
+    setState(() => _showStreamSources = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Stream source controls unlocked')),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        title: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _handleSettingsTitleTap,
+          child: const Text('Settings'),
+        ),
+      ),
       body: ListView(
         padding: EdgeInsets.fromLTRB(0, 8, 0, 24 + Responsive.bottomNavInset(context)),
         children: [
@@ -50,7 +75,7 @@ class SettingsScreen extends StatelessWidget {
                   trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
                   onTap: () {
                     Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => WatchlistScreen(onSelect: onSelect)),
+                      MaterialPageRoute(builder: (_) => WatchlistScreen(onSelect: widget.onSelect)),
                     );
                   },
                 ),
@@ -77,6 +102,21 @@ class SettingsScreen extends StatelessWidget {
               ],
             ),
           ),
+
+          if (_showStreamSources) ...[
+            const _SectionLabel('Stream Sources'),
+            _SettingsCard(
+              child: ListTile(
+                leading: const Icon(Icons.dns_outlined, color: AppTheme.accent),
+                title: const Text('Stream Sources'),
+                subtitle: const Text('Choose primary or backup server', style: AppTheme.metaStyle),
+                trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const StreamSourcesScreen()),
+                ),
+              ),
+            ),
+          ],
 
           // ---------------------------------------------------------------
           const _SectionLabel('Appearance'),

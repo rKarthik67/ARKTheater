@@ -434,6 +434,16 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
     _loadCurrentLink(resumeAt: resumePosition);
   }
 
+  void _switchAudio(String label) {
+    final links = _result.videoLinks ?? const [];
+    final sameQuality = links.where((link) =>
+        audioLabelForLink(link) == label && link.quality == _currentLink.quality);
+    final next = sameQuality.isNotEmpty
+        ? sameQuality.first
+        : links.firstWhere((link) => audioLabelForLink(link) == label);
+    _switchQuality(next);
+  }
+
   Future<void> _switchProvider(int index) async {
     if (index == _providerIndex || _switchingProvider) return;
     final provider = widget.providers[index];
@@ -834,6 +844,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
   Widget build(BuildContext context) {
     final hasOtherProviders = widget.providers.length > 1;
     final hasOtherQualities = (_result.videoLinks?.length ?? 0) > 1;
+    final audioLabels = audioLabelsForLinks(_result.videoLinks ?? const []);
     final currentProvider = widget.providers[_providerIndex];
     final buffering = _controller?.value.isBuffering ?? false;
     final subtitleText = _currentSubtitleText();
@@ -926,6 +937,29 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                               child: Icon(Icons.check, size: 16, color: AppTheme.accent),
                             ),
                           Text(link.quality ?? 'unknown quality'),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            if (audioLabels.length > 1)
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.headphones_outlined),
+                tooltip: 'Audio',
+                onSelected: _switchAudio,
+                itemBuilder: (context) => [
+                  for (final label in audioLabels)
+                    PopupMenuItem(
+                      value: label,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (audioLabelForLink(_currentLink) == label)
+                            const Padding(
+                              padding: EdgeInsets.only(right: 8),
+                              child: Icon(Icons.check, size: 16, color: AppTheme.accent),
+                            ),
+                          Text(label),
                         ],
                       ),
                     ),

@@ -11,6 +11,7 @@ import '../services/tmdb_service.dart';
 import '../state/recently_watched_provider.dart';
 import '../state/watchlist_provider.dart';
 import '../video_providers/names.dart';
+import '../video_providers/common.dart';
 import '../video_providers/provider_loader.dart';
 import '../video_providers/scraper_api.dart';
 import '../widgets/error_view.dart';
@@ -81,7 +82,11 @@ class _DetailScreenState extends State<DetailScreen> {
     if (widget.autoPlay) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          _play(season: widget.autoPlaySeason, episode: widget.autoPlayEpisode);
+          _play(
+            season: widget.autoPlaySeason,
+            episode: widget.autoPlayEpisode,
+            chooseProvider: false,
+          );
         }
       });
     }
@@ -126,20 +131,29 @@ class _DetailScreenState extends State<DetailScreen> {
     }
   }
 
-  Future<void> _play({int? season, int? episode}) async {
+  Future<void> _play({
+    int? season,
+    int? episode,
+    bool chooseProvider = true,
+  }) async {
     if (_resolving) return;
+
+    final providers = _providers ?? await (_providersFuture ??= _loadProviders());
+    if (!mounted) return;
+
+    final selectedIndex = chooseProvider
+        ? await _showProviderPicker(providers)
+        : -1;
+    if (selectedIndex == null || !mounted) return;
+
     setState(() {
       _resolving = true;
       _resolvingStatus = 'Finding an ad-free source...';
     });
 
     try {
-      final providers = _providers ?? await (_providersFuture ??= _loadProviders());
-      if (!mounted) return;
-
-      final selection = await ProviderLoader.loadFirstSuccessful(
-        providers: providers,
-        load: (provider) => widget.item.type == MediaType.movie
+      Future<ProviderLoadResult> load(VideoProvider provider) {
+        return widget.item.type == MediaType.movie
             ? ProviderLoader.loadMovieFromProvider(
                 provider: provider,
                 movieId: widget.item.id,
@@ -151,12 +165,31 @@ class _DetailScreenState extends State<DetailScreen> {
                 seasonNumber: season!,
                 episodeNumber: episode!,
                 scraperApiUrl: AppConfig.scraperBaseUrl,
-              ),
-        onResult: (index, provider, result) {
-          if (!mounted) return;
-          setState(() => _resolvingStatus = 'Trying ${provider.displayName}...');
-        },
-      );
+              );
+      }
+
+      final ProviderSelection? selection;
+      if (selectedIndex == -1) {
+        selection = await ProviderLoader.loadFirstSuccessful(
+          providers: providers,
+          load: load,
+          onResult: (index, provider, result) {
+            if (!mounted) return;
+            setState(() => _resolvingStatus = 'Trying ${provider.displayName}...');
+          },
+        );
+      } else {
+        final provider = providers[selectedIndex];
+        setState(() => _resolvingStatus = 'Trying ${provider.displayName}...');
+        final result = await load(provider);
+        selection = result.success && (result.videoLinks?.isNotEmpty ?? false)
+            ? ProviderSelection(
+                index: selectedIndex,
+                provider: provider,
+                result: result,
+              )
+            : null;
+      }
 
       if (!mounted) return;
 
@@ -172,6 +205,7 @@ class _DetailScreenState extends State<DetailScreen> {
         );
         return;
       }
+      final resolvedSelection = selection!;
 
       await context.read<RecentlyWatchedProvider>().record(item: widget.item, season: season, episode: episode);
 
@@ -184,8 +218,8 @@ class _DetailScreenState extends State<DetailScreen> {
             season: season,
             episode: episode,
             providers: providers,
-            initialProviderIndex: selection.index,
-            initialResult: selection.result,
+            initialProviderIndex: resolvedSelection.index,
+            initialResult: resolvedSelection.result,
           ),
         ),
       );
@@ -197,6 +231,41 @@ class _DetailScreenState extends State<DetailScreen> {
     } finally {
       if (mounted) setState(() => _resolving = false);
     }
+  }
+
+  Future<int?> _showProviderPicker(List<VideoProvider> providers) {
+    return showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      backgroundColor: AppTheme.surface,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(
+              title: Text('Choose a stream source', style: AppTheme.sectionHeaderStyle),
+              subtitle: Text('Choose Auto to try sources in order.', style: AppTheme.metaStyle),
+            ),
+            ListTile(
+              leading: const Icon(Icons.auto_awesome, color: AppTheme.accent),
+              title: const Text('Auto'),
+              subtitle: const Text('Find the first available source', style: AppTheme.metaStyle),
+              onTap: () => Navigator.of(sheetContext).pop(-1),
+            ),
+            const Divider(height: 1, color: AppTheme.border),
+            for (var index = 0; index < providers.length; index++)
+              ListTile(
+                leading: const Icon(Icons.play_circle_outline, color: AppTheme.textSecondary),
+                title: Text(providers[index].displayName),
+                subtitle: providers[index].content?.isNotEmpty == true
+                    ? Text(providers[index].content!, style: AppTheme.metaStyle)
+                    : null,
+                onTap: () => Navigator.of(sheetContext).pop(index),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   /// Fallback for when every provider fails: an in-app, ad-blocked WebView

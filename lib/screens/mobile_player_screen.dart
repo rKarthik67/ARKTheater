@@ -273,6 +273,12 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                 'Switch provider',
                 _showProviderSwitcher,
               ),
+            if (audioLabelsForLinks(_result.videoLinks ?? const []).length > 1)
+              BetterPlayerOverflowMenuItem(
+                Icons.headphones_outlined,
+                'Switch audio',
+                _showAudioSwitcher,
+              ),
             BetterPlayerOverflowMenuItem(
               Icons.open_in_browser,
               'Watch via embedded player',
@@ -556,6 +562,44 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
             ],
           ),
         ),
+        ),
+      ),
+    );
+  }
+
+  void _showAudioSwitcher() {
+    final links = _result.videoLinks ?? const [];
+    final labels = audioLabelsForLinks(links);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => LiquidGlassSheet(
+        child: SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const ListTile(
+                title: Text('Switch audio', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+              ),
+              for (final label in labels)
+                ListTile(
+                  leading: Icon(
+                    audioLabelForLink(_currentLink) == label ? Icons.radio_button_checked : Icons.radio_button_off,
+                    color: audioLabelForLink(_currentLink) == label ? AppTheme.accent : Colors.white54,
+                  ),
+                  title: Text(label, style: const TextStyle(color: Colors.white)),
+                  onTap: () {
+                    final sameQuality = links.where((link) =>
+                        audioLabelForLink(link) == label && link.quality == _currentLink.quality);
+                    final next = sameQuality.isNotEmpty
+                        ? sameQuality.first
+                        : links.firstWhere((link) => audioLabelForLink(link) == label);
+                    Navigator.pop(sheetContext);
+                    _switchQuality(next);
+                  },
+                ),
+            ],
+          ),
         ),
       ),
     );
