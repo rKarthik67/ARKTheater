@@ -51,6 +51,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     final settings = context.watch<SettingsProvider>();
+    final watchlist = context.watch<WatchlistProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -98,6 +99,24 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     style: AppTheme.metaStyle,
                   ),
                   onTap: () => _importWatchlist(context),
+                ),
+                const Divider(height: 1, color: AppTheme.border),
+                ListTile(
+                  leading: Icon(
+                    watchlist.isShared ? Icons.sync : Icons.devices_other_outlined,
+                    color: watchlist.isShared ? AppTheme.accent : AppTheme.textSecondary,
+                  ),
+                  title: const Text('Shared Watchlist'),
+                  subtitle: Text(
+                    watchlist.isShared
+                        ? (watchlist.isSyncing
+                            ? 'Syncing with your linked devices…'
+                            : 'Connected — sync, add a device, or disconnect')
+                        : 'Link devices with a four-digit, four-minute code',
+                    style: AppTheme.metaStyle,
+                  ),
+                  trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+                  onTap: () => _showSharedWatchlistOptions(context),
                 ),
               ],
             ),
@@ -439,6 +458,192 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+}
+
+Future<void> _showSharedWatchlistOptions(BuildContext context) async {
+  final watchlist = context.read<WatchlistProvider>();
+  if (!watchlist.isShared) {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(
+              title: Text('Shared Watchlist'),
+              subtitle: Text('Your local titles are merged safely; nothing is removed by sync.'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_link, color: AppTheme.accent),
+              title: const Text('Create shared watchlist'),
+              subtitle: const Text('Make this device the first linked device'),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                await _createSharedWatchlist(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.link, color: AppTheme.textSecondary),
+              title: const Text('Join with a code'),
+              subtitle: const Text('Enter a four-digit code from an already linked device'),
+              onTap: () async {
+                Navigator.pop(sheetContext);
+                await _joinSharedWatchlist(context);
+              },
+            ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
+    return;
+  }
+
+  await showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (sheetContext) => SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const ListTile(
+            title: Text('Shared Watchlist'),
+            subtitle: Text('New additions sync to all linked devices. Removed titles can return on a later union sync.'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.sync, color: AppTheme.accent),
+            title: const Text('Sync now'),
+            onTap: () async {
+              Navigator.pop(sheetContext);
+              await _syncSharedWatchlist(context);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.phonelink_setup_outlined, color: AppTheme.textSecondary),
+            title: const Text('Add another device'),
+            subtitle: const Text('Creates a one-use code valid for four minutes'),
+            onTap: () async {
+              Navigator.pop(sheetContext);
+              await _showPairingCode(context);
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.link_off, color: AppTheme.textSecondary),
+            title: const Text('Disconnect this device'),
+            subtitle: const Text('Keeps your local titles and the shared library intact'),
+            onTap: () async {
+              Navigator.pop(sheetContext);
+              await _disconnectSharedWatchlist(context);
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
+      ),
+    ),
+  );
+}
+
+Future<void> _createSharedWatchlist(BuildContext context) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    await context.read<WatchlistProvider>().createSharedWatchlist();
+    if (!context.mounted) return;
+    messenger.showSnackBar(const SnackBar(content: Text('Shared watchlist created. Add another device to generate a code.')));
+  } catch (error) {
+    if (context.mounted) messenger.showSnackBar(SnackBar(content: Text("Couldn't create shared watchlist: $error")));
+  }
+}
+
+Future<void> _joinSharedWatchlist(BuildContext context) async {
+  final controller = TextEditingController();
+  final code = await showDialog<String>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Join shared watchlist'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        maxLength: 4,
+        decoration: const InputDecoration(hintText: 'Four-digit code'),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () => Navigator.pop(dialogContext, controller.text.trim()),
+          child: const Text('Join'),
+        ),
+      ],
+    ),
+  );
+  controller.dispose();
+  if (code == null || code.isEmpty) return;
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final result = await context.read<WatchlistProvider>().joinSharedWatchlist(code);
+    if (!context.mounted) return;
+    messenger.showSnackBar(SnackBar(content: Text('Connected — ${result.added} title(s) added from the shared watchlist.')));
+  } catch (error) {
+    if (context.mounted) messenger.showSnackBar(SnackBar(content: Text("Couldn't join shared watchlist: $error")));
+  }
+}
+
+Future<void> _syncSharedWatchlist(BuildContext context) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final result = await context.read<WatchlistProvider>().syncNow();
+    if (!context.mounted) return;
+    messenger.showSnackBar(SnackBar(content: Text(
+      result.added == 0 ? 'Watchlist is already up to date.' : 'Synced — ${result.added} title(s) added.',
+    )));
+  } catch (error) {
+    if (context.mounted) messenger.showSnackBar(SnackBar(content: Text("Couldn't sync watchlist: $error")));
+  }
+}
+
+Future<void> _showPairingCode(BuildContext context) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final pairing = await context.read<WatchlistProvider>().createPairingCode();
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Add another device'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('On the other device, choose “Join with a code” and enter:'),
+            const SizedBox(height: 16),
+            Text(pairing.code, style: Theme.of(dialogContext).textTheme.displaySmall?.copyWith(letterSpacing: 8)),
+            const SizedBox(height: 16),
+            const Text('This code is one-use and expires in four minutes.', textAlign: TextAlign.center),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Done'))],
+      ),
+    );
+  } catch (error) {
+    if (context.mounted) messenger.showSnackBar(SnackBar(content: Text("Couldn't create pairing code: $error")));
+  }
+}
+
+Future<void> _disconnectSharedWatchlist(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Disconnect this device?'),
+      content: const Text('This device will stop syncing. Its local titles and the shared watchlist on other devices are kept.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Cancel')),
+        FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Disconnect')),
+      ],
+    ),
+  );
+  if (confirmed != true) return;
+  await context.read<WatchlistProvider>().disconnectSharedWatchlist();
+  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('This device was disconnected from the shared watchlist.')));
 }
 
 /// "Export Watchlist" (Settings > Library) - shares the current watchlist

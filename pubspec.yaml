@@ -67,6 +67,9 @@ dependencies:
 
   # Local persistence for watchlist / continue-watching
   shared_preferences: ^2.3.3
+  # Stores the long-lived shared-watchlist credential in the platform's
+  # protected keychain/keystore rather than ordinary app preferences.
+  flutter_secure_storage: ^9.2.2
 
   # Icons
   cupertino_icons: ^1.0.8

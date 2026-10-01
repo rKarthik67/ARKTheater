@@ -1,18 +1,27 @@
 import 'package:flutter/foundation.dart';
 import '../models/media_item.dart';
+import '../services/shared_watchlist_service.dart';
 import '../services/watchlist_service.dart';
 
 class WatchlistProvider extends ChangeNotifier {
-  WatchlistProvider(this._service) {
+  WatchlistProvider(this._service, {SharedWatchlistService? sharedService})
+      : _sharedService = sharedService ?? SharedWatchlistService() {
     _load();
   }
 
   final WatchlistService _service;
+  final SharedWatchlistService _sharedService;
   List<MediaItem> _items = [];
   bool _loaded = false;
+  bool _shared = false;
+  bool _syncing = false;
+  String? _lastSyncError;
 
   List<MediaItem> get items => List.unmodifiable(_items);
   bool get isLoaded => _loaded;
+  bool get isShared => _shared;
+  bool get isSyncing => _syncing;
+  String? get lastSyncError => _lastSyncError;
 
   bool contains(MediaType type, int id) =>
       _items.any((i) => i.type == type && i.id == id);
@@ -21,6 +30,13 @@ class WatchlistProvider extends ChangeNotifier {
     _items = await _service.load();
     _loaded = true;
     notifyListeners();
+    final secret = await _sharedService.readSecret();
+    _shared = secret != null && secret.isNotEmpty;
+    notifyListeners();
+    if (_shared) {
+      await _sharedService.startEvents(_syncFromEvent);
+      await _syncSilently();
+    }
   }
 
   /// Empties the whole watchlist in one go (Settings > Data & Storage).
@@ -39,6 +55,98 @@ class WatchlistProvider extends ChangeNotifier {
     }
     notifyListeners();
     await _service.save(_items);
+    // The initial shared-watchlist release intentionally has add-only union
+    // semantics. Removals stay local until a future synced-delete design is
+    // introduced; a later union sync may restore an item another device has.
+    if (_shared && !exists) await _syncSilently();
+  }
+
+  /// Creates a permanent SQLite-backed shared library from this device's
+  /// current local titles, then begins receiving live change notifications.
+  Future<WatchlistMergeResult> createSharedWatchlist() async {
+    _setSyncing(true);
+    try {
+      final snapshot = await _sharedService.create(_items);
+      _shared = true;
+      final result = await _mergeSnapshot(snapshot.items);
+      await _sharedService.startEvents(_syncFromEvent);
+      _lastSyncError = null;
+      return result;
+    } catch (error) {
+      _lastSyncError = '$error';
+      rethrow;
+    } finally {
+      _setSyncing(false);
+    }
+  }
+
+  /// Claims a four-digit, one-use pairing code and merges both devices into
+  /// the same long-lived library.
+  Future<WatchlistMergeResult> joinSharedWatchlist(String code) async {
+    _setSyncing(true);
+    try {
+      final snapshot = await _sharedService.join(code, _items);
+      _shared = true;
+      final result = await _mergeSnapshot(snapshot.items);
+      await _sharedService.startEvents(_syncFromEvent);
+      _lastSyncError = null;
+      return result;
+    } catch (error) {
+      _lastSyncError = '$error';
+      rethrow;
+    } finally {
+      _setSyncing(false);
+    }
+  }
+
+  Future<PairingCode> createPairingCode() => _sharedService.createPairingCode();
+
+  /// Reads the server's authoritative union and contributes any local titles
+  /// the server has not seen. This is also the recovery path after offline
+  /// use or a missed live event.
+  Future<WatchlistMergeResult> syncNow() async {
+    if (!_shared) throw const SharedWatchlistException('This device is not connected to a shared watchlist.');
+    if (_syncing) return const WatchlistMergeResult(added: 0, alreadyPresent: 0);
+    _setSyncing(true);
+    try {
+      final snapshot = await _sharedService.sync(_items);
+      final result = await _mergeSnapshot(snapshot.items);
+      _lastSyncError = null;
+      return result;
+    } catch (error) {
+      _lastSyncError = '$error';
+      rethrow;
+    } finally {
+      _setSyncing(false);
+    }
+  }
+
+  /// Stops using the remote library on only this device. The shared library
+  /// and its titles stay intact for other linked devices.
+  Future<void> disconnectSharedWatchlist() async {
+    await _sharedService.disconnect();
+    _shared = false;
+    _lastSyncError = null;
+    notifyListeners();
+  }
+
+  Future<void> _syncFromEvent() async {
+    if (!_shared || _syncing) return;
+    await _syncSilently();
+  }
+
+  Future<void> _syncSilently() async {
+    try {
+      await syncNow();
+    } catch (_) {
+      // The manual Sync now control exposes the failure. Local bookmarks stay
+      // available and the next event/app launch retries automatically.
+    }
+  }
+
+  void _setSyncing(bool value) {
+    _syncing = value;
+    notifyListeners();
   }
 
   /// The JSON text for "Export Watchlist" (Settings > Library) - the
@@ -63,6 +171,10 @@ class WatchlistProvider extends ChangeNotifier {
   /// importing. Returns how many titles were newly added vs. already
   /// present, so the caller can tell the user what actually changed.
   Future<WatchlistMergeResult> importAndMerge(List<MediaItem> incoming) async {
+    return _mergeSnapshot(incoming);
+  }
+
+  Future<WatchlistMergeResult> _mergeSnapshot(List<MediaItem> incoming) async {
     final toAdd = <MediaItem>[];
     var alreadyPresent = 0;
     for (final item in incoming) {

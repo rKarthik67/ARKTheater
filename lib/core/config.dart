@@ -19,6 +19,13 @@ class AppConfig {
   /// Only the two maintained endpoints are accepted here.
   static String get scraperBaseUrl => _scraperBaseUrl;
 
+  /// Shared watchlists require the Oracle host where SQLite lives. This may be
+  /// overridden with an HTTPS domain once one is configured; unlike streaming,
+  /// a library credential must never be sent over an untrusted connection.
+  static String get sharedWatchlistBaseUrl =>
+      (dotenv.env['SHARED_WATCHLIST_BASE_URL'] ?? oracleScraperBaseUrl)
+          .replaceAll(RegExp(r'/+$'), '');
+
   static void setScraperBaseUrl(String value) {
     final normalized = value.replaceAll(RegExp(r'/+$'), '');
     _scraperBaseUrl = normalized == vercelScraperBaseUrl
