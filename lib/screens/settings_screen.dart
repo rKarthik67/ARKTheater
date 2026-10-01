@@ -470,9 +470,9 @@ Future<void> _showSharedWatchlistOptions(BuildContext context) async {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const ListTile(
-              title: Text('Shared Watchlist'),
-              subtitle: Text('Your local titles are merged safely; nothing is removed by sync.'),
+          const ListTile(
+            title: Text('Shared Watchlist'),
+            subtitle: Text('Your local titles are merged safely with linked devices.'),
             ),
             ListTile(
               leading: const Icon(Icons.add_link, color: AppTheme.accent),
@@ -509,7 +509,7 @@ Future<void> _showSharedWatchlistOptions(BuildContext context) async {
         children: [
           const ListTile(
             title: Text('Shared Watchlist'),
-            subtitle: Text('New additions sync to all linked devices. Removed titles can return on a later union sync.'),
+            subtitle: Text('New additions and removals sync to all linked devices.'),
           ),
           ListTile(
             leading: const Icon(Icons.sync, color: AppTheme.accent),

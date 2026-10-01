@@ -15,6 +15,7 @@ import '../models/media_item.dart';
 /// turn a list of items into JSON and back.
 class WatchlistService {
   static const _key = 'ark_theater.watchlist.v1';
+  static const _pendingChangesKey = 'ark_theater.watchlist.pending_changes.v1';
 
   /// Bumped only if the exported shape changes in a way older parseImportJson
   /// logic couldn't already handle - parseImportJson doesn't currently
@@ -33,6 +34,69 @@ class WatchlistService {
     final prefs = await SharedPreferences.getInstance();
     final raw = jsonEncode(items.map(_toStorageJson).toList());
     await prefs.setString(_key, raw);
+  }
+
+  /// Keeps explicit shared-library actions until the device can deliver them.
+  /// A full-list sync is intentionally unable to infer a deletion, so queued
+  /// actions are what make an offline remove/re-add replicate later.
+  Future<List<WatchlistPendingChange>> loadPendingChanges() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_pendingChangesKey);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return const [];
+      final changes = <WatchlistPendingChange>[];
+      for (final entry in decoded) {
+        if (entry is! Map) continue;
+        final operation = entry['operation'];
+        final item = entry['item'];
+        if (operation is! String || item is! Map) continue;
+        if (operation != WatchlistChangeOperation.add.name &&
+            operation != WatchlistChangeOperation.remove.name) {
+          continue;
+        }
+        changes.add(WatchlistPendingChange(
+          operation: operation == WatchlistChangeOperation.add.name
+              ? WatchlistChangeOperation.add
+              : WatchlistChangeOperation.remove,
+          item: _fromStorageJson(Map<String, dynamic>.from(item)),
+        ));
+      }
+      return changes;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> queuePendingChange(WatchlistPendingChange change) async {
+    final changes = await loadPendingChanges();
+    // Only the latest local action for one title matters before the next sync.
+    final merged = <String, WatchlistPendingChange>{
+      for (final current in changes) current.key: current,
+      change.key: change,
+    };
+    await _savePendingChanges(merged.values.toList());
+  }
+
+  Future<void> removePendingChange(WatchlistPendingChange change) async {
+    final changes = await loadPendingChanges();
+    await _savePendingChanges(changes.where((current) => current.key != change.key).toList());
+  }
+
+  Future<void> _savePendingChanges(List<WatchlistPendingChange> changes) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (changes.isEmpty) {
+      await prefs.remove(_pendingChangesKey);
+      return;
+    }
+    await prefs.setString(
+      _pendingChangesKey,
+      jsonEncode(changes.map((change) => {
+            'operation': change.operation.name,
+            'item': _toStorageJson(change.item),
+          }).toList()),
+    );
   }
 
   /// Builds the pretty-printed JSON text written to the exported file - a
@@ -101,4 +165,15 @@ class WatchlistService {
         voteAverage: (json['voteAverage'] as num?)?.toDouble() ?? 0,
         releaseDate: json['releaseDate'] as String?,
       );
+}
+
+enum WatchlistChangeOperation { add, remove }
+
+class WatchlistPendingChange {
+  const WatchlistPendingChange({required this.operation, required this.item});
+
+  final WatchlistChangeOperation operation;
+  final MediaItem item;
+
+  String get key => '${item.type.name}:${item.id}';
 }

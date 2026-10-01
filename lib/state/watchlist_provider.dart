@@ -41,13 +41,27 @@ class WatchlistProvider extends ChangeNotifier {
 
   /// Empties the whole watchlist in one go (Settings > Data & Storage).
   Future<void> clearAll() async {
+    final removed = List<MediaItem>.from(_items);
     _items = [];
     notifyListeners();
     await _service.save(const []);
+    if (_shared) {
+      for (final item in removed) {
+        await _service.queuePendingChange(WatchlistPendingChange(
+          operation: WatchlistChangeOperation.remove,
+          item: item,
+        ));
+      }
+      await _syncSilently();
+    }
   }
 
   Future<void> toggle(MediaItem item) async {
     final exists = contains(item.type, item.id);
+    final changedItem = exists
+        ? _items.firstWhere((current) =>
+            current.type == item.type && current.id == item.id)
+        : item;
     if (exists) {
       _items.removeWhere((i) => i.type == item.type && i.id == item.id);
     } else {
@@ -55,10 +69,15 @@ class WatchlistProvider extends ChangeNotifier {
     }
     notifyListeners();
     await _service.save(_items);
-    // The initial shared-watchlist release intentionally has add-only union
-    // semantics. Removals stay local until a future synced-delete design is
-    // introduced; a later union sync may restore an item another device has.
-    if (_shared && !exists) await _syncSilently();
+    if (_shared) {
+      await _service.queuePendingChange(WatchlistPendingChange(
+        operation: exists
+            ? WatchlistChangeOperation.remove
+            : WatchlistChangeOperation.add,
+        item: changedItem,
+      ));
+      await _syncSilently();
+    }
   }
 
   /// Creates a permanent SQLite-backed shared library from this device's
@@ -68,7 +87,7 @@ class WatchlistProvider extends ChangeNotifier {
     try {
       final snapshot = await _sharedService.create(_items);
       _shared = true;
-      final result = await _mergeSnapshot(snapshot.items);
+      final result = await _applySnapshot(snapshot);
       await _sharedService.startEvents(_syncFromEvent);
       _lastSyncError = null;
       return result;
@@ -87,7 +106,7 @@ class WatchlistProvider extends ChangeNotifier {
     try {
       final snapshot = await _sharedService.join(code, _items);
       _shared = true;
-      final result = await _mergeSnapshot(snapshot.items);
+      final result = await _applySnapshot(snapshot);
       await _sharedService.startEvents(_syncFromEvent);
       _lastSyncError = null;
       return result;
@@ -109,8 +128,9 @@ class WatchlistProvider extends ChangeNotifier {
     if (_syncing) return const WatchlistMergeResult(added: 0, alreadyPresent: 0);
     _setSyncing(true);
     try {
+      await _deliverPendingChanges();
       final snapshot = await _sharedService.sync(_items);
-      final result = await _mergeSnapshot(snapshot.items);
+      final result = await _applySnapshot(snapshot);
       _lastSyncError = null;
       return result;
     } catch (error) {
@@ -144,6 +164,17 @@ class WatchlistProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> _deliverPendingChanges() async {
+    final changes = await _service.loadPendingChanges();
+    for (final change in changes) {
+      final snapshot = change.operation == WatchlistChangeOperation.add
+          ? await _sharedService.addItem(change.item)
+          : await _sharedService.removeItem(change.item);
+      await _service.removePendingChange(change);
+      await _applySnapshot(snapshot);
+    }
+  }
+
   void _setSyncing(bool value) {
     _syncing = value;
     notifyListeners();
@@ -172,6 +203,27 @@ class WatchlistProvider extends ChangeNotifier {
   /// present, so the caller can tell the user what actually changed.
   Future<WatchlistMergeResult> importAndMerge(List<MediaItem> incoming) async {
     return _mergeSnapshot(incoming);
+  }
+
+  Future<WatchlistMergeResult> _applySnapshot(
+    SharedWatchlistSnapshot snapshot,
+  ) async {
+    final deletedKeys = {
+      for (final item in snapshot.deleted) '${item.type.name}:${item.id}',
+    };
+    final removedCount = _items.length;
+    if (deletedKeys.isNotEmpty) {
+      _items.removeWhere(
+        (item) => deletedKeys.contains('${item.type.name}:${item.id}'),
+      );
+    }
+    final hadRemovals = _items.length != removedCount;
+    final result = await _mergeSnapshot(snapshot.items);
+    if (hadRemovals) {
+      await _service.save(_items);
+      notifyListeners();
+    }
+    return result;
   }
 
   Future<WatchlistMergeResult> _mergeSnapshot(List<MediaItem> incoming) async {

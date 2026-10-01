@@ -28,6 +28,10 @@ class SharedWatchlistService {
         baseUrl: AppConfig.sharedWatchlistBaseUrl,
         connectTimeout: const Duration(seconds: 15),
         receiveTimeout: const Duration(seconds: 30),
+        // Pairing failures (such as an expired/claimed code) are expected
+        // client responses. Let _responseData surface the API's concise error
+        // instead of Dio replacing it with a generic 404 exception.
+        validateStatus: (_) => true,
       ));
 
   Future<String?> readSecret() => _secureStorage.read(key: _secretKey);
@@ -71,6 +75,25 @@ class SharedWatchlistService {
     return _snapshot(_responseData(response));
   }
 
+  Future<SharedWatchlistSnapshot> addItem(MediaItem item) async {
+    final secret = await _requiredSecret();
+    final response = await _dio.post(
+      '/api/v2/watchlist/items',
+      data: {'item': _itemJson(item)},
+      options: Options(headers: {'Authorization': 'Bearer $secret'}),
+    );
+    return _snapshot(_responseData(response));
+  }
+
+  Future<SharedWatchlistSnapshot> removeItem(MediaItem item) async {
+    final secret = await _requiredSecret();
+    final response = await _dio.delete(
+      '/api/v2/watchlist/items/${item.type.name}/${item.id}',
+      options: Options(headers: {'Authorization': 'Bearer $secret'}),
+    );
+    return _snapshot(_responseData(response));
+  }
+
   Future<PairingCode> createPairingCode() async {
     final secret = await readSecret();
     if (secret == null || secret.isEmpty) throw const SharedWatchlistException('Create or join a shared watchlist first.');
@@ -83,6 +106,16 @@ class SharedWatchlistService {
     final expiresAt = DateTime.tryParse(data['expiresAt'] as String? ?? '');
     if (code == null || expiresAt == null) throw const SharedWatchlistException('The server did not create a pairing code.');
     return PairingCode(code: code, expiresAt: expiresAt.toLocal());
+  }
+
+  Future<String> _requiredSecret() async {
+    final secret = await readSecret();
+    if (secret == null || secret.isEmpty) {
+      throw const SharedWatchlistException(
+        'This device is not connected to a shared watchlist.',
+      );
+    }
+    return secret;
   }
 
   /// Opens an SSE connection while the app is running. Events are hints only:
@@ -177,18 +210,47 @@ class SharedWatchlistService {
         releaseDate: json['releaseDate'] as String?,
       ));
     }
+    final deleted = <SharedWatchlistItemKey>[];
+    final rawDeleted = data['deleted'];
+    if (rawDeleted is List) {
+      for (final entry in rawDeleted) {
+        if (entry is! Map) continue;
+        final json = Map<String, dynamic>.from(entry);
+        final id = json['id'];
+        final type = json['type'];
+        if (id is int && (type == 'movie' || type == 'tv')) {
+          deleted.add(SharedWatchlistItemKey(
+            id: id,
+            type: type == 'movie' ? MediaType.movie : MediaType.tv,
+          ));
+        }
+      }
+    }
     return SharedWatchlistSnapshot(
       items: items,
+      deleted: deleted,
       revision: (data['revision'] as num?)?.toInt() ?? 0,
     );
   }
 }
 
 class SharedWatchlistSnapshot {
-  const SharedWatchlistSnapshot({required this.items, required this.revision});
+  const SharedWatchlistSnapshot({
+    required this.items,
+    required this.deleted,
+    required this.revision,
+  });
 
   final List<MediaItem> items;
+  final List<SharedWatchlistItemKey> deleted;
   final int revision;
+}
+
+class SharedWatchlistItemKey {
+  const SharedWatchlistItemKey({required this.id, required this.type});
+
+  final int id;
+  final MediaType type;
 }
 
 class PairingCode {
