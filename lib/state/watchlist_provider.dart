@@ -27,7 +27,7 @@ class WatchlistProvider extends ChangeNotifier {
       _items.any((i) => i.type == type && i.id == id);
 
   Future<void> _load() async {
-    _items = await _service.load();
+    _items = _newestFirst(await _service.load());
     _loaded = true;
     notifyListeners();
     final secret = await _sharedService.readSecret();
@@ -65,8 +65,9 @@ class WatchlistProvider extends ChangeNotifier {
     if (exists) {
       _items.removeWhere((i) => i.type == item.type && i.id == item.id);
     } else {
-      _items = [item, ..._items];
+      _items = [item.withWatchlistAddedAt(DateTime.now()), ..._items];
     }
+    _items = _newestFirst(_items);
     notifyListeners();
     await _service.save(_items);
     if (_shared) {
@@ -229,21 +230,45 @@ class WatchlistProvider extends ChangeNotifier {
   Future<WatchlistMergeResult> _mergeSnapshot(List<MediaItem> incoming) async {
     final toAdd = <MediaItem>[];
     var alreadyPresent = 0;
+    var updatedExisting = false;
     for (final item in incoming) {
-      if (contains(item.type, item.id)) {
+      final existingIndex = _items.indexWhere(
+        (current) => current.type == item.type && current.id == item.id,
+      );
+      if (existingIndex >= 0) {
         alreadyPresent++;
+        // Older local entries predate addedAt. Fill it from the shared
+        // library so their order becomes identical on every linked device.
+        if (_items[existingIndex].watchlistAddedAt == null &&
+            item.watchlistAddedAt != null) {
+          _items[existingIndex] = _items[existingIndex]
+              .withWatchlistAddedAt(item.watchlistAddedAt!);
+          updatedExisting = true;
+        }
       } else if (!toAdd.any((i) => i.type == item.type && i.id == item.id)) {
         // Also de-dupes the incoming file against itself, in case the same
         // title appears twice in whatever was imported.
         toAdd.add(item);
       }
     }
-    if (toAdd.isNotEmpty) {
-      _items = [...toAdd, ..._items];
+    if (toAdd.isNotEmpty || updatedExisting) {
+      _items = _newestFirst([...toAdd, ..._items]);
       notifyListeners();
       await _service.save(_items);
     }
     return WatchlistMergeResult(added: toAdd.length, alreadyPresent: alreadyPresent);
+  }
+
+  List<MediaItem> _newestFirst(List<MediaItem> items) {
+    final indexed = items.indexed.toList();
+    indexed.sort((a, b) {
+      final aTime = a.$2.watchlistAddedAt?.millisecondsSinceEpoch ?? 0;
+      final bTime = b.$2.watchlistAddedAt?.millisecondsSinceEpoch ?? 0;
+      return bTime.compareTo(aTime) != 0
+          ? bTime.compareTo(aTime)
+          : a.$1.compareTo(b.$1);
+    });
+    return indexed.map((entry) => entry.$2).toList();
   }
 }
 

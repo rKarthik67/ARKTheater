@@ -15,6 +15,10 @@ class MediaItem {
   final double voteAverage;
   final String? releaseDate;
 
+  /// The time this title entered a watchlist. It is supplied by the shared
+  /// library and persisted locally so every device can use newest-first order.
+  final DateTime? watchlistAddedAt;
+
   /// TMDB genre IDs and original-language code - present on every list-style
   /// TMDB response (discover/trending/popular/top_rated/search) and on
   /// detail responses too, so this is safe to leave empty/null when
@@ -33,9 +37,24 @@ class MediaItem {
     this.backdropPath,
     this.voteAverage = 0,
     this.releaseDate,
+    this.watchlistAddedAt,
     this.genreIds = const [],
     this.originalLanguage,
   });
+
+  MediaItem withWatchlistAddedAt(DateTime addedAt) => MediaItem(
+        id: id,
+        type: type,
+        title: title,
+        overview: overview,
+        posterPath: posterPath,
+        backdropPath: backdropPath,
+        voteAverage: voteAverage,
+        releaseDate: releaseDate,
+        genreIds: genreIds,
+        originalLanguage: originalLanguage,
+        watchlistAddedAt: addedAt,
+      );
 
   factory MediaItem.fromTmdbJson(Map<String, dynamic> json, MediaType type) {
     return MediaItem(

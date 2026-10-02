@@ -208,6 +208,8 @@ class SharedWatchlistService {
         posterPath: json['posterPath'] as String?,
         voteAverage: (json['voteAverage'] as num?)?.toDouble() ?? 0,
         releaseDate: json['releaseDate'] as String?,
+        watchlistAddedAt:
+            DateTime.tryParse(json['addedAt'] as String? ?? '')?.toLocal(),
       ));
     }
     final deleted = <SharedWatchlistItemKey>[];
