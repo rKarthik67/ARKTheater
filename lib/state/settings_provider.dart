@@ -42,6 +42,10 @@ class SettingsProvider extends ChangeNotifier {
   static const _scrollAnimationColorKey = 'settings_scroll_animation_color';
   static const _entranceAnimationStyleKey = 'settings_entrance_animation_style';
   static const _scraperBaseUrlKey = 'settings_scraper_base_url';
+  static const _customScraperBackupUrlKey =
+      'settings_custom_scraper_backup_url';
+  static const _scraperSourceVersionKey = 'settings_scraper_source_version';
+  static const _scraperSourceVersion = 2;
 
   /// Multiplies every [LiquidGlass] surface's base opacity/tint. 1.0 is the
   /// app's original, heavier frosted look; lower values push toward a very
@@ -107,8 +111,10 @@ class SettingsProvider extends ChangeNotifier {
   EntranceAnimationStyle _entranceAnimationStyle = EntranceAnimationStyle.fadeLift;
   EntranceAnimationStyle get entranceAnimationStyle => _entranceAnimationStyle;
 
-  String _scraperBaseUrl = AppConfig.oracleScraperBaseUrl;
+  String _scraperBaseUrl = AppConfig.primaryScraperBaseUrl;
   String get scraperBaseUrl => _scraperBaseUrl;
+  String? _customScraperBackupUrl;
+  String? get customScraperBackupUrl => _customScraperBackupUrl;
 
   bool _isLoaded = false;
   bool get isLoaded => _isLoaded;
@@ -132,9 +138,22 @@ class SettingsProvider extends ChangeNotifier {
       final scale = prefs.getDouble(_textScaleKey);
       if (scale != null) _textScale = scale.clamp(minTextScale, maxTextScale);
       _watchRegion = prefs.getString(_watchRegionKey) ?? 'IN';
+      final savedCustomBackup = prefs.getString(_customScraperBackupUrlKey);
+      if (_isValidScraperUrl(savedCustomBackup)) {
+        _customScraperBackupUrl = _normalizeScraperUrl(savedCustomBackup!);
+      }
       final savedScraperUrl = prefs.getString(_scraperBaseUrlKey);
-      if (savedScraperUrl == AppConfig.vercelScraperBaseUrl) {
-        _scraperBaseUrl = AppConfig.vercelScraperBaseUrl;
+      final savedSourceVersion = prefs.getInt(_scraperSourceVersionKey) ?? 0;
+      // Previous builds defaulted to the raw HTTP Oracle address. Migrate
+      // existing devices once to the HTTPS primary; subsequent user choices
+      // are preserved normally.
+      if (savedSourceVersion >= _scraperSourceVersion &&
+          _isAllowedScraperUrl(savedScraperUrl)) {
+        _scraperBaseUrl = _normalizeScraperUrl(savedScraperUrl!);
+      } else {
+        _scraperBaseUrl = AppConfig.primaryScraperBaseUrl;
+        await prefs.setInt(_scraperSourceVersionKey, _scraperSourceVersion);
+        await prefs.setString(_scraperBaseUrlKey, _scraperBaseUrl);
       }
       AppConfig.setScraperBaseUrl(_scraperBaseUrl);
       final scrollColor = prefs.getInt(_scrollAnimationColorKey);
@@ -260,9 +279,8 @@ class SettingsProvider extends ChangeNotifier {
   }
 
   Future<void> setScraperBaseUrl(String value) async {
-    final next = value == AppConfig.vercelScraperBaseUrl
-        ? AppConfig.vercelScraperBaseUrl
-        : AppConfig.oracleScraperBaseUrl;
+    if (!_isAllowedScraperUrl(value)) return;
+    final next = _normalizeScraperUrl(value);
     if (next == _scraperBaseUrl) return;
     _scraperBaseUrl = next;
     AppConfig.setScraperBaseUrl(next);
@@ -270,13 +288,67 @@ class SettingsProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_scraperBaseUrlKey, next);
+      await prefs.setInt(_scraperSourceVersionKey, _scraperSourceVersion);
     } catch (_) {
       // The selected endpoint remains active for this session.
     }
   }
 
   Future<void> resetScraperBaseUrl() =>
-      setScraperBaseUrl(AppConfig.oracleScraperBaseUrl);
+      setScraperBaseUrl(AppConfig.primaryScraperBaseUrl);
+
+  /// Saves one user-provided fallback. It must be an absolute HTTP(S) API
+  /// address; malformed values are ignored instead of reaching network code.
+  Future<bool> setCustomScraperBackupUrl(String value) async {
+    if (!_isValidScraperUrl(value)) return false;
+    final next = _normalizeScraperUrl(value);
+    _customScraperBackupUrl = next;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_customScraperBackupUrlKey, next);
+    } catch (_) {
+      // The in-memory backup stays usable for this session.
+    }
+    return true;
+  }
+
+  Future<void> removeCustomScraperBackupUrl() async {
+    final removed = _customScraperBackupUrl;
+    _customScraperBackupUrl = null;
+    if (_scraperBaseUrl == removed) {
+      _scraperBaseUrl = AppConfig.primaryScraperBaseUrl;
+      AppConfig.setScraperBaseUrl(_scraperBaseUrl);
+    }
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_customScraperBackupUrlKey);
+      await prefs.setString(_scraperBaseUrlKey, _scraperBaseUrl);
+    } catch (_) {
+      // Best-effort persistence.
+    }
+  }
+
+  bool _isAllowedScraperUrl(String? value) {
+    if (!_isValidScraperUrl(value)) return false;
+    final normalized = _normalizeScraperUrl(value!);
+    return normalized == AppConfig.primaryScraperBaseUrl ||
+        normalized == AppConfig.oracleScraperBaseUrl ||
+        normalized == AppConfig.vercelScraperBaseUrl ||
+        normalized == _customScraperBackupUrl;
+  }
+
+  bool _isValidScraperUrl(String? value) {
+    if (value == null) return false;
+    final uri = Uri.tryParse(value.trim());
+    return uri != null &&
+        uri.hasAuthority &&
+        (uri.scheme == 'https' || uri.scheme == 'http');
+  }
+
+  String _normalizeScraperUrl(String value) =>
+      value.trim().replaceAll(RegExp(r'/+$'), '');
 
   /// Pass `null` for a plain fade with no color sweep.
   Future<void> setScrollAnimationColor(Color? color) async {

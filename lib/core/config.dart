@@ -6,11 +6,17 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class AppConfig {
   AppConfig._();
 
+  /// Primary stream and shared-watchlist API. HTTPS is required for browser
+  /// clients and protects the long-lived shared-library credential.
+  static const String primaryScraperBaseUrl =
+      'https://arkscraper.duckdns.org';
+
+  /// Kept as a backup while the original Oracle endpoint remains available.
   static const String oracleScraperBaseUrl = 'http://129.154.245.13';
   static const String vercelScraperBaseUrl =
       'https://ark-video-scrapper.vercel.app';
 
-  static String _scraperBaseUrl = oracleScraperBaseUrl;
+  static String _scraperBaseUrl = primaryScraperBaseUrl;
 
   static String get tmdbApiKey =>
       dotenv.env['TMDB_API_KEY'] ?? '';
@@ -23,14 +29,11 @@ class AppConfig {
   /// overridden with an HTTPS domain once one is configured; unlike streaming,
   /// a library credential must never be sent over an untrusted connection.
   static String get sharedWatchlistBaseUrl =>
-      (dotenv.env['SHARED_WATCHLIST_BASE_URL'] ?? oracleScraperBaseUrl)
+      (dotenv.env['SHARED_WATCHLIST_BASE_URL'] ?? primaryScraperBaseUrl)
           .replaceAll(RegExp(r'/+$'), '');
 
   static void setScraperBaseUrl(String value) {
-    final normalized = value.replaceAll(RegExp(r'/+$'), '');
-    _scraperBaseUrl = normalized == vercelScraperBaseUrl
-        ? vercelScraperBaseUrl
-        : oracleScraperBaseUrl;
+    _scraperBaseUrl = value.replaceAll(RegExp(r'/+$'), '');
   }
 
   // Used to search sub.wyzie.io directly from the app for a title's
