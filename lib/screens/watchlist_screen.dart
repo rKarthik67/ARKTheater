@@ -217,12 +217,19 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
         WatchlistSort.ratingHighest =>
           second.voteAverage.compareTo(first.voteAverage),
       };
-      return comparison != 0 ? comparison : a.$1.compareTo(b.$1);
+      return comparison != 0
+          ? comparison
+          : _compareStableItems(first, second);
     });
     items
       ..clear()
       ..addAll(indexed.map((entry) => entry.$2));
   }
+
+  int _compareStableItems(MediaItem first, MediaItem second) =>
+      first.type.index.compareTo(second.type.index) != 0
+          ? first.type.index.compareTo(second.type.index)
+          : first.id.compareTo(second.id);
 }
 
 enum WatchlistSort {

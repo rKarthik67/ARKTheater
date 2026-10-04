@@ -237,10 +237,11 @@ class WatchlistProvider extends ChangeNotifier {
       );
       if (existingIndex >= 0) {
         alreadyPresent++;
-        // Older local entries predate addedAt. Fill it from the shared
-        // library so their order becomes identical on every linked device.
-        if (_items[existingIndex].watchlistAddedAt == null &&
-            item.watchlistAddedAt != null) {
+        // SQLite is authoritative for when a title entered the shared
+        // library. Replacing a device-local timestamp ensures every linked
+        // device uses precisely the same newest-first order.
+        if (item.watchlistAddedAt != null &&
+            _items[existingIndex].watchlistAddedAt != item.watchlistAddedAt) {
           _items[existingIndex] = _items[existingIndex]
               .withWatchlistAddedAt(item.watchlistAddedAt!);
           updatedExisting = true;
@@ -266,10 +267,15 @@ class WatchlistProvider extends ChangeNotifier {
       final bTime = b.$2.watchlistAddedAt?.millisecondsSinceEpoch ?? 0;
       return bTime.compareTo(aTime) != 0
           ? bTime.compareTo(aTime)
-          : a.$1.compareTo(b.$1);
+          : _compareStableItems(a.$2, b.$2);
     });
     return indexed.map((entry) => entry.$2).toList();
   }
+
+  int _compareStableItems(MediaItem first, MediaItem second) =>
+      first.type.index.compareTo(second.type.index) != 0
+          ? first.type.index.compareTo(second.type.index)
+          : first.id.compareTo(second.id);
 }
 
 /// What happened when an imported watchlist was merged in - shown to the
