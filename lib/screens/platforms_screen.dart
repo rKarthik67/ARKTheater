@@ -10,6 +10,7 @@ import '../state/settings_provider.dart';
 import '../widgets/fade_in_on_scroll.dart';
 import '../widgets/platform_logo.dart';
 import 'platform_results_screen.dart';
+import 'live_tv_screen.dart';
 
 const kWatchRegions = [
   ('IN', 'India'),
@@ -97,7 +98,7 @@ class _PlatformsScreenState extends State<PlatformsScreen> {
     final region = settings.watchRegion;
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Platforms'),
@@ -137,6 +138,7 @@ class _PlatformsScreenState extends State<PlatformsScreen> {
                 text: 'Production Houses (${kProductionHouses.length})',
                 icon: const Icon(Icons.theaters_outlined, size: 20),
               ),
+              const Tab(text: 'Live TV', icon: Icon(Icons.tv_outlined, size: 20)),
             ],
           ),
         ),
@@ -152,6 +154,7 @@ class _PlatformsScreenState extends State<PlatformsScreen> {
               logos: _companyLogos,
               onTap: (f) => _openFilter(f, PlatformFilterType.company, region),
             ),
+            const LiveTvScreen(),
           ],
         ),
       ),

@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../core/config.dart';
 import '../models/media_item.dart';
+import '../models/live_tv_channel.dart';
 import '../models/resolved_stream.dart';
 
 /// Thin client for ARKVideoScrapper. This is the ONLY place the app talks to
@@ -18,6 +19,18 @@ class ScraperService {
             ));
 
   final Dio _dio;
+
+  Future<List<LiveTvChannel>> liveTvChannels() async {
+    final res = await _dio.get('/api/v2/live-tv/channels');
+    final data = res.data as Map;
+    if (data['success'] != true || data['channels'] is! List) {
+      throw Exception(data['error'] ?? 'Could not load live TV channels.');
+    }
+    return (data['channels'] as List)
+        .whereType<Map>()
+        .map((entry) => LiveTvChannel.fromJson(Map<String, dynamic>.from(entry)))
+        .toList();
+  }
 
   Future<StreamResolution> resolveMovie(int tmdbId, {bool forceRefresh = false}) async {
     final res = await _dio.get(
