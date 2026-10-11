@@ -575,9 +575,68 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
     );
   }
 
-  void _showSubtitlesSheet() {
-    var sheetOpen = true;
+  void _showSourceSubtitlesSheet() {
     final providerSubs = _result.subtitleLinks ?? const [];
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => LiquidGlassSheet(
+        child: SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+            children: [
+              const Text('Source subtitles',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              const Text('Provided by the current stream source',
+                  style: TextStyle(color: Colors.white54, fontSize: 13)),
+              const SizedBox(height: 12),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.subtitles_off_outlined, color: Colors.white70),
+                title: const Text('Off', style: TextStyle(color: Colors.white)),
+                onTap: () {
+                  _selectNoSubtitle();
+                  Navigator.pop(sheetContext);
+                },
+              ),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.format_color_text, color: Colors.white70),
+                title: const Text('Subtitle appearance', style: TextStyle(color: Colors.white)),
+                onTap: _showSubtitleStyleSheet,
+              ),
+              const Divider(color: Colors.white24),
+              if (providerSubs.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 16),
+                  child: Text('This stream does not provide subtitle tracks.',
+                      style: TextStyle(color: Colors.white54)),
+                )
+              else
+                for (final sub in providerSubs)
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.closed_caption_outlined, color: Colors.white70),
+                    title: Text(sub.language ?? 'Unknown',
+                        style: const TextStyle(color: Colors.white)),
+                    subtitle: const Text('From stream source',
+                        style: TextStyle(color: Colors.white38, fontSize: 11)),
+                    onTap: () {
+                      unawaited(_selectEmbeddedSubtitle(sub));
+                      Navigator.pop(sheetContext);
+                    },
+                  ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSearchSubtitlesSheet() {
+    var sheetOpen = true;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -600,7 +659,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Subtitles',
+                      'Search subtitles',
                       style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 12),
@@ -631,53 +690,6 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                           ],
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 4),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.format_color_text, color: Colors.white70),
-                      title: const Text('Subtitle appearance', style: TextStyle(color: Colors.white)),
-                      subtitle: const Text(
-                        'Text color, background, font size',
-                        style: TextStyle(color: Colors.white38, fontSize: 11),
-                      ),
-                      onTap: _showSubtitleStyleSheet,
-                    ),
-                    const Divider(color: Colors.white24, height: 16),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.subtitles_off, color: Colors.white70),
-                      title: const Text('Off', style: TextStyle(color: Colors.white)),
-                      onTap: () {
-                        _selectNoSubtitle();
-                        Navigator.pop(sheetContext);
-                      },
-                    ),
-                    if (providerSubs.isNotEmpty) ...[
-                      const Padding(
-                        padding: EdgeInsets.only(top: 8, bottom: 2),
-                        child: Text(
-                          'From this source',
-                          style: TextStyle(color: Colors.white54, fontSize: 12),
-                        ),
-                      ),
-                      for (final sub in providerSubs)
-                        ListTile(
-                          contentPadding: EdgeInsets.zero,
-                          leading: const Icon(Icons.subtitles_outlined, color: Colors.white70),
-                          title: Text(sub.language ?? 'Unknown', style: const TextStyle(color: Colors.white)),
-                          onTap: () {
-                            unawaited(_selectEmbeddedSubtitle(sub));
-                            Navigator.pop(sheetContext);
-                          },
-                        ),
-                    ],
-                    const Padding(
-                      padding: EdgeInsets.only(top: 8, bottom: 2),
-                      child: Text(
-                        'Search subtitles',
-                        style: TextStyle(color: Colors.white54, fontSize: 12),
-                      ),
                     ),
                     if (_loadingExternalSubtitles)
                       const Padding(
@@ -894,8 +906,13 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
               ),
             IconButton(
               icon: const Icon(Icons.subtitles_outlined),
-              tooltip: 'Subtitles (drag active subtitles to move them)',
-              onPressed: _showSubtitlesSheet,
+              tooltip: 'Source subtitles',
+              onPressed: _showSourceSubtitlesSheet,
+            ),
+            IconButton(
+              icon: const Icon(Icons.manage_search_outlined),
+              tooltip: 'Search subtitles',
+              onPressed: _showSearchSubtitlesSheet,
             ),
             PopupMenuButton<double>(
               icon: const Icon(Icons.speed),

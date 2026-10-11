@@ -263,11 +263,19 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
           controlBarColor: Colors.black.withOpacity(0.4),
           enableFullscreen: true,
           enablePlaybackSpeed: true,
-          enableSubtitles: true,
+          // Source subtitles and searched subtitles deliberately have their
+          // own menu actions below. Disable Better Player's generic item so
+          // it cannot mix the two sets together.
+          enableSubtitles: false,
           enableSkips: true,
           overflowMenuCustomItems: [
             BetterPlayerOverflowMenuItem(
               Icons.subtitles_outlined,
+              'Source subtitles',
+              _showSourceSubtitlesSheet,
+            ),
+            BetterPlayerOverflowMenuItem(
+              Icons.manage_search_outlined,
               'Search subtitles',
               _showExternalSubtitlesSheet,
             ),
@@ -738,6 +746,118 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     }
   }
 
+  /// Shows only the subtitle tracks supplied with the currently selected
+  /// stream provider. Search results intentionally live in their own picker
+  /// so a user never has to guess whether a caption came from the stream or
+  /// from the external subtitle search.
+  void _showSourceSubtitlesSheet() {
+    final subtitles = _result.subtitleLinks ?? const <RegularSubtitleLinks>[];
+    final sheetHeight = MediaQuery.sizeOf(context).height * 0.58;
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) => LiquidGlassSheet(
+        child: SafeArea(
+          child: SizedBox(
+            height: sheetHeight,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Source subtitles',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Provided by the current stream source',
+                    style: TextStyle(color: Colors.white54, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.subtitles_off_outlined,
+                        color: Colors.white70),
+                    title: const Text('Off',
+                        style: TextStyle(color: Colors.white)),
+                    onTap: () {
+                      _subtitleDelaySeconds = 0.0;
+                      _activeSubtitleRawContent = null;
+                      _activeSubtitleName = null;
+                      _controller?.setupSubtitleSource(
+                        BetterPlayerSubtitlesSource(
+                          type: BetterPlayerSubtitlesSourceType.none,
+                        ),
+                      );
+                      Navigator.pop(sheetContext);
+                    },
+                  ),
+                  const Divider(color: Colors.white24, height: 1),
+                  if (subtitles.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Text(
+                        'This stream does not provide subtitle tracks.',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                    )
+                  else
+                    Expanded(
+                      child: ListView.builder(
+                        itemCount: subtitles.length,
+                        itemBuilder: (context, index) {
+                          final subtitle = subtitles[index];
+                          final url = subtitle.url;
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: const Icon(Icons.closed_caption_outlined,
+                                color: Colors.white70),
+                            title: Text(
+                              subtitle.language ?? 'Unknown',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                            subtitle: const Text(
+                              'From stream source',
+                              style: TextStyle(
+                                  color: Colors.white38, fontSize: 11),
+                            ),
+                            onTap: url == null
+                                ? null
+                                : () {
+                                    _subtitleDelaySeconds = 0.0;
+                                    _activeSubtitleRawContent = null;
+                                    _activeSubtitleName = null;
+                                    _controller?.setupSubtitleSource(
+                                      BetterPlayerSubtitlesSource(
+                                        type:
+                                            BetterPlayerSubtitlesSourceType.network,
+                                        urls: [url],
+                                        name: subtitle.language ?? 'Unknown',
+                                        headers: subtitle.headers,
+                                      ),
+                                    );
+                                    Navigator.pop(sheetContext);
+                                  },
+                          );
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   // Mirrors flixquest's PlayerExternalSubtitles: search Wyzie Subs by TMDB
   // id/season/episode and add whichever the user taps to the controller's
   // own subtitle source list, so it shows up in BetterPlayer's built-in
@@ -756,12 +876,19 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
               if (sheetOpen) _fetchExternalSubtitles(setSheetState);
             });
           }
+          // A content-sized sheet plus a shrink-wrapped nested ListView is
+          // unreliable on iPad: the sheet can consume the drag gesture and
+          // leave the subtitle results with no stable scroll viewport. Give
+          // this picker a bounded, screen-relative height and let the result
+          // list explicitly own all remaining space instead.
+          final sheetHeight = MediaQuery.sizeOf(sheetContext).height * 0.72;
           return LiquidGlassSheet(
             child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+              child: SizedBox(
+                height: sheetHeight,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                  child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('Search subtitles', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
@@ -821,10 +948,11 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                       child: Text('No external subtitles found for this title.', style: TextStyle(color: Colors.white54)),
                     )
                   else
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 320),
+                    Expanded(
                       child: ListView.builder(
-                        shrinkWrap: true,
+                        // This is the only scrollable in the sheet. Keeping
+                        // it expanded gives touch drags to the list instead
+                        // of the modal sheet, including on iPad.
                         itemCount: _externalSubtitles.length,
                         itemBuilder: (context, index) {
                           final sub = _externalSubtitles[index];
@@ -878,8 +1006,9 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                       ),
                     ),
                 ],
+                  ),
+                ),
               ),
-            ),
             ),
           );
         },
