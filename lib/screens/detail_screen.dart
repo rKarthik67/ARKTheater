@@ -409,6 +409,17 @@ class _DetailScreenState extends State<DetailScreen> {
                   ),
                 ),
               ),
+              if (detail.collectionItems.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: FadeInOnScroll(
+                    delay: const Duration(milliseconds: 55),
+                    child: MediaRow(
+                      title: detail.collectionName ?? 'Collection',
+                      items: detail.collectionItems,
+                      onItemTap: widget.onSelectRelated,
+                    ),
+                  ),
+                ),
               if (detail.cast.isNotEmpty)
                 SliverToBoxAdapter(
                   child: FadeInOnScroll(

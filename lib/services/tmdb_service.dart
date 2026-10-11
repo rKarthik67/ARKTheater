@@ -258,6 +258,30 @@ class TmdbService {
         .take(12)
         .map((c) => CastMember.fromJson(c as Map<String, dynamic>))
         .toList();
+    String? collectionName;
+    var collectionItems = <MediaItem>[];
+    // `belongs_to_collection` is TMDB's explicit franchise relationship.
+    // Only use it when TMDB has curated it - similar/recommended titles are
+    // not necessarily sequels, prequels, or spin-offs.
+    final collection = type == MediaType.movie
+        ? detailsJson['belongs_to_collection'] as Map<String, dynamic>?
+        : null;
+    final collectionId = collection?['id'];
+    if (collectionId is int) {
+      collectionName = collection?['name'] as String?;
+      try {
+        final response = await _dio.get('/collection/$collectionId', queryParameters: _auth);
+        final parts = response.data['parts'] as List? ?? const [];
+        collectionItems = parts
+            .map((part) => MediaItem.fromTmdbJson(part as Map<String, dynamic>, MediaType.movie))
+            .where((part) => part.id != id)
+            .toList()
+          ..sort((a, b) => (a.releaseDate ?? '').compareTo(b.releaseDate ?? ''));
+      } catch (_) {
+        // The title detail is still useful if a collection endpoint is
+        // temporarily unavailable, so do not fail the entire page.
+      }
+    }
     final similar = (similarJson['results'] as List? ?? [])
         .map((s) => MediaItem.fromTmdbJson(s as Map<String, dynamic>, type))
         .toList();
@@ -273,6 +297,8 @@ class TmdbService {
       genres: genres,
       runtimeMinutes: runtime,
       cast: cast,
+      collectionName: collectionName,
+      collectionItems: collectionItems,
       similar: similar,
       seasons: seasons,
     );

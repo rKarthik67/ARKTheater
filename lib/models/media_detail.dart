@@ -71,6 +71,11 @@ class MediaDetail {
   final List<String> genres;
   final int? runtimeMinutes;
   final List<CastMember> cast;
+  /// Official TMDB collection/franchise parts. TMDB currently exposes this
+  /// relationship for movies; TV relationships can be supplied here when a
+  /// reliable source is available instead of guessing from title text.
+  final String? collectionName;
+  final List<MediaItem> collectionItems;
   final List<MediaItem> similar;
   final List<SeasonSummary> seasons; // empty for movies
 
@@ -79,6 +84,8 @@ class MediaDetail {
     this.genres = const [],
     this.runtimeMinutes,
     this.cast = const [],
+    this.collectionName,
+    this.collectionItems = const [],
     this.similar = const [],
     this.seasons = const [],
   });
