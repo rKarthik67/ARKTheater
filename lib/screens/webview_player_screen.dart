@@ -56,6 +56,16 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
   String get _url =>
       _provider.urlFor(widget.type, widget.tmdbId, season: widget.season, episode: widget.episode);
 
+  /// Embed pages can load video, subtitles, and scripts from other hosts, so
+  /// those subresources must remain available. A full-page navigation is
+  /// different: it is almost always a click-through/popunder when it leaves
+  /// the selected embed's site. Keep that navigation inside the provider.
+  bool _isSelectedEmbedHost(String host) {
+    final selectedHost = WebUri(_url).host.toLowerCase();
+    final candidate = host.toLowerCase();
+    return candidate == selectedHost || candidate.endsWith('.$selectedHost');
+  }
+
   @override
   void initState() {
     super.initState();
@@ -77,6 +87,15 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
+        // AppBar automatically honours the iPad safe area, including the
+        // compact/Stage Manager window controls. An explicit leading button
+        // keeps the app back action in that protected header rather than in
+        // the provider's web content.
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back to details',
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
         title: Text('${widget.title} · ${_provider.name}', overflow: TextOverflow.ellipsis),
         actions: [
           PopupMenuButton<int>(
@@ -115,8 +134,10 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
               // second window/tab at all, on either platform.
               javaScriptCanOpenWindowsAutomatically: false,
               supportMultipleWindows: false,
+              useShouldOverrideUrlLoading: true,
               mediaPlaybackRequiresUserGesture: false,
               allowsInlineMediaPlayback: true,
+              disallowOverScroll: true,
               contentBlockers: _contentBlockers,
               userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
                   '(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
@@ -135,7 +156,14 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
             onCreateWindow: (controller, createWindowAction) async => false,
             shouldOverrideUrlLoading: (controller, navigationAction) async {
               final uri = navigationAction.request.url;
-              if (uri != null && isAdOrTrackerHost(uri.host)) {
+              if (uri == null) return NavigationActionPolicy.CANCEL;
+              if (isAdOrTrackerHost(uri.host)) {
+                return NavigationActionPolicy.CANCEL;
+              }
+
+              // Do not let a clicked ad replace the whole embedded player.
+              // Iframes and media requests are intentionally unaffected.
+              if (navigationAction.isForMainFrame && !_isSelectedEmbedHost(uri.host)) {
                 return NavigationActionPolicy.CANCEL;
               }
               return NavigationActionPolicy.ALLOW;

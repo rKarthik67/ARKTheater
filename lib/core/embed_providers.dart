@@ -24,6 +24,7 @@ const embedProviders = <EmbedProvider>[
   EmbedProvider(name: 'VidSrcMe', movieUrl: _vidsrcMeMovie, tvUrl: _vidsrcMeTv),
   EmbedProvider(name: 'VidCore', movieUrl: _vidcoreMovie, tvUrl: _vidcoreTv),
   EmbedProvider(name: 'Codeera', movieUrl: _codeeraMovie, tvUrl: _codeeraTv),
+  EmbedProvider(name: 'VidRift', movieUrl: _vidriftMovie, tvUrl: _vidriftTv),
 ];
 
 String _videasyMovie(int id) => 'https://player.videasy.net/movie/$id';
@@ -40,3 +41,6 @@ String _vidcoreTv(int id, int s, int e) => 'https://vidcore.org/embed/tv/$id/$s/
 
 String _codeeraMovie(int id) => 'https://iembed.codeera.dev/embed/movie/$id';
 String _codeeraTv(int id, int s, int e) => 'https://iembed.codeera.dev/embed/tv/$id/$s/$e';
+
+String _vidriftMovie(int id) => 'https://embed.vidrift.net/embed/movie/$id';
+String _vidriftTv(int id, int s, int e) => 'https://embed.vidrift.net/embed/tv/$id/$s/$e';

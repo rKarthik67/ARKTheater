@@ -860,6 +860,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
     final currentProvider = widget.providers[_providerIndex];
     final buffering = _controller?.value.isBuffering ?? false;
     final subtitleText = _currentSubtitleText();
+    final topSafeInset = MediaQuery.paddingOf(context).top;
 
     return PopScope(
       canPop: false,
@@ -877,13 +878,19 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
         // The toolbar stays mounted while hidden, so toggling controls cannot
         // cause a layout shift.
         appBar: PreferredSize(
-          preferredSize: const Size.fromHeight(kToolbarHeight),
-          child: IgnorePointer(
-            ignoring: !_controlsVisible,
-            child: AnimatedOpacity(
-              opacity: _controlsVisible ? 1 : 0,
-              duration: const Duration(milliseconds: 160),
-              child: AppBar(
+          // This player also runs on iPad. Include the dynamic safe inset so
+          // its Back button stays below the compact-window/Stage Manager
+          // controls when the app's window size changes.
+          preferredSize: Size.fromHeight(kToolbarHeight + topSafeInset),
+          child: SafeArea(
+            bottom: false,
+            child: IgnorePointer(
+              ignoring: !_controlsVisible,
+              child: AnimatedOpacity(
+                opacity: _controlsVisible ? 1 : 0,
+                duration: const Duration(milliseconds: 160),
+                child: AppBar(
+          primary: false,
           backgroundColor: Colors.black,
           automaticallyImplyLeading: false,
           leading: IconButton(
@@ -1018,6 +1025,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
               ),
             ),
           ),
+        ),
         ),
         body: _error != null
             ? Center(

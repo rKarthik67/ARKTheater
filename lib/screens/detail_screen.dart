@@ -379,12 +379,28 @@ class _DetailScreenState extends State<DetailScreen> {
           final detail = snapshot.data!;
           final isTv = widget.item.type == MediaType.tv;
           final isDesktop = Responsive.isDesktop(context);
+          final flutterView = View.of(context);
+          final displayWidth = flutterView.display.size.width / flutterView.devicePixelRatio;
+          final displayHeight = flutterView.display.size.height / flutterView.devicePixelRatio;
+          final isResizableWindow =
+              Theme.of(context).platform == TargetPlatform.iOS &&
+              MediaQuery.sizeOf(context).shortestSide >= 600 &&
+              (MediaQuery.sizeOf(context).width < displayWidth - 1 ||
+                  MediaQuery.sizeOf(context).height < displayHeight - 1);
+          // iPadOS draws its compact-window controls over the upper-left
+          // corner but does not expose their bounds as a safe-area inset.
+          // Keep the page exactly unchanged and move only the Back button
+          // below them while the app is in a resized window.
+          // iPad already reports most of the title-bar height as padding.
+          // This is only the small extra nudge needed to clear its controls.
+          final backButtonOffset = isResizableWindow ? 25.0 : 0.0;
 
           return CustomScrollView(
             slivers: [
               SliverAppBar(
                 expandedHeight: isDesktop ? 420 : 260,
                 pinned: true,
+                automaticallyImplyLeading: false,
                 flexibleSpace: FlexibleSpaceBar(
                   background: Stack(
                     fit: StackFit.expand,
@@ -401,6 +417,15 @@ class _DetailScreenState extends State<DetailScreen> {
                             end: Alignment.bottomCenter,
                             colors: [Colors.transparent, AppTheme.background],
                           ),
+                        ),
+                      ),
+                      Positioned(
+                        top: MediaQuery.paddingOf(context).top + backButtonOffset,
+                        left: 8,
+                        child: IconButton(
+                          icon: const Icon(Icons.arrow_back),
+                          tooltip: 'Back',
+                          onPressed: () => Navigator.of(context).maybePop(),
                         ),
                       ),
                     ],
