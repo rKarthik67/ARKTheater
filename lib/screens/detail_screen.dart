@@ -10,10 +10,10 @@ import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
 import '../state/recently_watched_provider.dart';
 import '../state/watchlist_provider.dart';
-import '../video_providers/names.dart';
 import '../video_providers/common.dart';
 import '../video_providers/provider_loader.dart';
 import '../video_providers/scraper_api.dart';
+import '../core/embed_providers.dart';
 import '../widgets/error_view.dart';
 import '../widgets/fade_in_on_scroll.dart';
 import '../widgets/loading_indicator.dart';
@@ -48,6 +48,14 @@ class DetailScreen extends StatefulWidget {
   State<DetailScreen> createState() => _DetailScreenState();
 }
 
+class _StreamChoice {
+  const _StreamChoice.scraper(this.index) : isEmbed = false;
+  const _StreamChoice.embed(this.index) : isEmbed = true;
+
+  final int index;
+  final bool isEmbed;
+}
+
 class _DetailScreenState extends State<DetailScreen> {
   final _tmdb = TmdbService();
   late Future<MediaDetail> _future;
@@ -63,8 +71,8 @@ class _DetailScreenState extends State<DetailScreen> {
   bool _loadingEpisodes = false;
 
   /// Loaded once and reused for every play tap: ARKVideoScrapper's live
-  /// provider catalog, with the direct VixSrc fallback appended last so
-  /// playback still has a chance even if the scraper backend is down.
+  /// provider catalog. Web embeds deliberately live in their own chooser
+  /// tab, rather than being silently used as a scraper-stream fallback.
   List<VideoProvider>? _providers;
   Future<List<VideoProvider>>? _providersFuture;
 
@@ -118,14 +126,12 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Future<List<VideoProvider>> _loadProviders() async {
     try {
-      final scraperProviders = await ScraperApi(AppConfig.scraperBaseUrl).getProviders();
-      final providers = [...scraperProviders, VideoProvider.directVixSrc];
+      final providers = await ScraperApi(AppConfig.scraperBaseUrl).getProviders();
       _providers = providers;
       return providers;
     } catch (_) {
-      // Scraper unreachable (not deployed yet, network hiccup, ...) - fall
-      // back to just the direct provider so playback can still work.
-      const providers = [VideoProvider.directVixSrc];
+      // The embed tab remains available even if the scraper is unavailable.
+      const providers = <VideoProvider>[];
       _providers = providers;
       return providers;
     }
@@ -141,10 +147,16 @@ class _DetailScreenState extends State<DetailScreen> {
     final providers = _providers ?? await (_providersFuture ??= _loadProviders());
     if (!mounted) return;
 
-    final selectedIndex = chooseProvider
+    final choice = chooseProvider
         ? await _showProviderPicker(providers)
-        : -1;
-    if (selectedIndex == null || !mounted) return;
+        : const _StreamChoice.scraper(-1);
+    if (choice == null || !mounted) return;
+
+    if (choice.isEmbed) {
+      _openWebViewEmbed(choice.index, season: season, episode: episode);
+      return;
+    }
+    final selectedIndex = choice.index;
 
     setState(() {
       _resolving = true;
@@ -233,36 +245,82 @@ class _DetailScreenState extends State<DetailScreen> {
     }
   }
 
-  Future<int?> _showProviderPicker(List<VideoProvider> providers) {
-    return showModalBottomSheet<int>(
+  Future<_StreamChoice?> _showProviderPicker(List<VideoProvider> providers) {
+    return showModalBottomSheet<_StreamChoice>(
       context: context,
       showDragHandle: true,
       backgroundColor: AppTheme.surface,
       builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            const ListTile(
-              title: Text('Choose a stream source', style: AppTheme.sectionHeaderStyle),
-              subtitle: Text('Choose Auto to try sources in order.', style: AppTheme.metaStyle),
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * .62,
+          child: DefaultTabController(
+            length: 2,
+            child: Column(
+              children: [
+                const ListTile(
+                  title: Text('Choose a stream source', style: AppTheme.sectionHeaderStyle),
+                ),
+                const TabBar(
+                  tabs: [
+                    Tab(text: 'Scraper streams'),
+                    Tab(text: 'Embeds'),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      ListView(
+                        children: [
+                          if (providers.isNotEmpty) ...[
+                            const ListTile(
+                              title: Text('Scraper streams'),
+                              subtitle: Text('Auto tries these sources in order.', style: AppTheme.metaStyle),
+                            ),
+                            ListTile(
+                              leading: const Icon(Icons.auto_awesome, color: AppTheme.accent),
+                              title: const Text('Auto'),
+                              subtitle: const Text('Find the first available source', style: AppTheme.metaStyle),
+                              onTap: () => Navigator.of(sheetContext).pop(const _StreamChoice.scraper(-1)),
+                            ),
+                            const Divider(height: 1, color: AppTheme.border),
+                            for (var index = 0; index < providers.length; index++)
+                              ListTile(
+                                leading: const Icon(Icons.play_circle_outline, color: AppTheme.textSecondary),
+                                title: Text(providers[index].displayName),
+                                subtitle: providers[index].content?.isNotEmpty == true
+                                    ? Text(providers[index].content!, style: AppTheme.metaStyle)
+                                    : null,
+                                onTap: () => Navigator.of(sheetContext).pop(_StreamChoice.scraper(index)),
+                              ),
+                          ] else
+                            const ListTile(
+                              leading: Icon(Icons.cloud_off_outlined, color: AppTheme.textSecondary),
+                              title: Text('No scraper streams available'),
+                              subtitle: Text('Check the scraper connection, or choose an embed.', style: AppTheme.metaStyle),
+                            ),
+                        ],
+                      ),
+                      ListView(
+                        children: [
+                          const ListTile(
+                            title: Text('Embeds'),
+                            subtitle: Text('Open a provider in the embedded player.', style: AppTheme.metaStyle),
+                          ),
+                          for (var index = 0; index < embedProviders.length; index++)
+                            ListTile(
+                              leading: const Icon(Icons.open_in_browser_outlined, color: AppTheme.textSecondary),
+                              title: Text(embedProviders[index].name),
+                              subtitle: const Text('Open embed player', style: AppTheme.metaStyle),
+                              onTap: () => Navigator.of(sheetContext).pop(_StreamChoice.embed(index)),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            ListTile(
-              leading: const Icon(Icons.auto_awesome, color: AppTheme.accent),
-              title: const Text('Auto'),
-              subtitle: const Text('Find the first available source', style: AppTheme.metaStyle),
-              onTap: () => Navigator.of(sheetContext).pop(-1),
-            ),
-            const Divider(height: 1, color: AppTheme.border),
-            for (var index = 0; index < providers.length; index++)
-              ListTile(
-                leading: const Icon(Icons.play_circle_outline, color: AppTheme.textSecondary),
-                title: Text(providers[index].displayName),
-                subtitle: providers[index].content?.isNotEmpty == true
-                    ? Text(providers[index].content!, style: AppTheme.metaStyle)
-                    : null,
-                onTap: () => Navigator.of(sheetContext).pop(index),
-              ),
-          ],
+          ),
         ),
       ),
     );
@@ -272,6 +330,10 @@ class _DetailScreenState extends State<DetailScreen> {
   /// showing a provider's real embed page (see WebViewPlayerScreen), so the
   /// user still has something to watch instead of a dead end.
   void _openWebViewFallback({int? season, int? episode}) {
+    _openWebViewEmbed(0, season: season, episode: episode);
+  }
+
+  void _openWebViewEmbed(int providerIndex, {int? season, int? episode}) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => WebViewPlayerScreen(
@@ -280,6 +342,7 @@ class _DetailScreenState extends State<DetailScreen> {
           tmdbId: widget.item.id,
           season: season,
           episode: episode,
+          initialProviderIndex: providerIndex,
         ),
       ),
     );
