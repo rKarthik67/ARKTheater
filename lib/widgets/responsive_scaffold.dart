@@ -77,8 +77,8 @@ class ResponsiveScaffold extends StatelessWidget {
             iconSize: 22,
             selectedFontSize: 11,
             unselectedFontSize: 10,
-            selectedItemColor: AppTheme.accent,
-            unselectedItemColor: Colors.white70,
+            selectedItemColor: Theme.of(context).colorScheme.primary,
+            unselectedItemColor: Theme.of(context).colorScheme.onSurface.withOpacity(0.72),
             items: [
               for (final d in destinations)
                 BottomNavigationBarItem(icon: Icon(d.icon), activeIcon: Icon(d.selectedIcon), label: d.label),

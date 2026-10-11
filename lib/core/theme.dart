@@ -36,15 +36,15 @@ class AppTheme {
   static const String serifFont = 'Instrument Serif';
   static const String sansFont = 'Space Grotesk';
 
-  // --- Surfaces (C.L.A.R.A.'s --bg/--panel/--panel-2/--panel-3) ---
-  static const Color background = Color(0xFF0C0A07);
-  static const Color surface = Color(0xFF14110C);
-  static const Color surfaceVariant = Color(0xFF1C1811);
-  static const Color surfaceTertiary = Color(0xFF241F16);
+  // --- Surfaces (aligned with ARK Play's charcoal liquid-glass palette) ---
+  static const Color background = Color(0xFF08090D);
+  static const Color surface = Color(0xFF101116);
+  static const Color surfaceVariant = Color(0xFF12141A);
+  static const Color surfaceTertiary = Color(0xFF1A1C23);
 
   // --- Borders (C.L.A.R.A.'s --line/--line-warm) ---
-  static const Color border = Color(0xFF2E2719);
-  static const Color borderWarm = Color(0xFF3D3320);
+  static const Color border = Color(0xFF292C34);
+  static const Color borderWarm = Color(0xFF3A3E49);
 
   // --- Accent: C.L.A.R.A.'s metallic gold (--gold family) - the app's
   // *default* accent. A user-chosen accent (SettingsProvider.accentColor)
@@ -68,7 +68,7 @@ class AppTheme {
 
   // --- Text (reflixmovies.vercel.app's --foreground/muted) ---
   static const Color textPrimary = Color(0xFFF5F5F7);
-  static const Color textSecondary = Color(0xFF8B8E9A);
+  static const Color textSecondary = Color(0xFFA8A5A0);
 
   // --- Named text styles for different kinds of information, so a title,
   // a synopsis, a metadata line and a badge never look interchangeable
@@ -229,6 +229,14 @@ class AppTheme {
   /// from this - see the Settings screen's "App Theme" section note.
   static ThemeData themeFor({Color accentColor = accent, SettingsProvider? settings}) {
     final base = ThemeData.dark(useMaterial3: true);
+    // ARK Play mixes the selected accent into all of its dark surfaces, not
+    // only buttons. Mirror that here so changing Accent Color recolors the
+    // complete Material shell while keeping the palette comfortably dark.
+    final themedBackground = Color.lerp(background, accentColor, 0.09)!;
+    final themedSurface = Color.lerp(surface, accentColor, 0.13)!;
+    final themedSurfaceVariant = Color.lerp(surfaceVariant, accentColor, 0.19)!;
+    final themedBorder = Color.lerp(border, accentColor, 0.35)!;
+    final themedSurfaceTertiary = Color.lerp(surfaceTertiary, accentColor, 0.16)!;
     final defaultTextTheme = _textTheme(base.textTheme).apply(
       bodyColor: textPrimary,
       displayColor: textPrimary,
@@ -261,11 +269,12 @@ class AppTheme {
     final glow = accentColor.withOpacity(0.22);
 
     return base.copyWith(
-      scaffoldBackgroundColor: background,
+      scaffoldBackgroundColor: themedBackground,
       colorScheme: base.colorScheme.copyWith(
         primary: accentColor,
         secondary: accentColor,
-        surface: surface,
+        surface: themedSurface,
+        surfaceVariant: themedSurfaceVariant,
         onSurface: textPrimary,
         error: error,
       ),
@@ -275,8 +284,8 @@ class AppTheme {
         foregroundColor: textPrimary,
         titleTextStyle: textTheme.titleLarge?.copyWith(color: textPrimary),
       ),
-      cardColor: surface,
-      dividerColor: border,
+      cardColor: themedSurface,
+      dividerColor: themedBorder,
       textTheme: textTheme,
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
@@ -302,7 +311,7 @@ class AppTheme {
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: surfaceVariant.withOpacity(0.92),
+        color: themedSurfaceVariant.withOpacity(0.92),
         surfaceTintColor: Colors.transparent,
         textStyle: textTheme.bodyMedium,
         shape: RoundedRectangleBorder(
@@ -333,11 +342,11 @@ class AppTheme {
       sliderTheme: SliderThemeData(
         activeTrackColor: accentColor,
         thumbColor: accentColor,
-        inactiveTrackColor: borderWarm,
+        inactiveTrackColor: themedBorder,
         overlayColor: glow,
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: surfaceTertiary,
+        backgroundColor: themedSurfaceTertiary,
         contentTextStyle: textTheme.bodyMedium?.copyWith(color: textPrimary),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
