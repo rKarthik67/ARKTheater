@@ -10,6 +10,7 @@ import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
 import '../state/recently_watched_provider.dart';
 import '../state/watchlist_provider.dart';
+import '../video_providers/names.dart';
 import '../video_providers/common.dart';
 import '../video_providers/provider_loader.dart';
 import '../video_providers/scraper_api.dart';
