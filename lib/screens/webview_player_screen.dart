@@ -56,16 +56,6 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
   String get _url =>
       _provider.urlFor(widget.type, widget.tmdbId, season: widget.season, episode: widget.episode);
 
-  /// Embed pages can load video, subtitles, and scripts from other hosts, so
-  /// those subresources must remain available. A full-page navigation is
-  /// different: it is almost always a click-through/popunder when it leaves
-  /// the selected embed's site. Keep that navigation inside the provider.
-  bool _isSelectedEmbedHost(String host) {
-    final selectedHost = WebUri(_url).host.toLowerCase();
-    final candidate = host.toLowerCase();
-    return candidate == selectedHost || candidate.endsWith('.$selectedHost');
-  }
-
   @override
   void initState() {
     super.initState();
@@ -161,11 +151,11 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
                 return NavigationActionPolicy.CANCEL;
               }
 
-              // Do not let a clicked ad replace the whole embedded player.
-              // Iframes and media requests are intentionally unaffected.
-              if (navigationAction.isForMainFrame && !_isSelectedEmbedHost(uri.host)) {
-                return NavigationActionPolicy.CANCEL;
-              }
+              // Do not restrict a non-ad main-frame redirect here. WKWebView
+              // on iPad legitimately hands several embed providers to a
+              // different host while their player initializes; blocking that
+              // handoff produces a permanently blank white page. Popups are
+              // still blocked above and known ad/tracker hosts remain denied.
               return NavigationActionPolicy.ALLOW;
             },
           ),
