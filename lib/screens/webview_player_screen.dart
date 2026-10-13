@@ -9,13 +9,11 @@ import '../models/media_item.dart';
 /// provider's real embed page in an app-controlled WebView instead of
 /// leaving the user with a dead end.
 ///
-/// This can't guarantee zero ads the way native extraction does (some ad
-/// creative is served from the same host as the player and isn't
-/// distinguishable from it), but it:
-///   - blocks window.open()/target=_blank popups outright, and
-///   - blocks requests to known ad/tracker/popunder hosts before they load,
-///     via ContentBlocker rules mirroring ARKVideoScrapper's own
-///     AD_HOST_PATTERNS (see ad_block_patterns.dart).
+/// This cannot guarantee zero ads the way native playback does, but it uses
+/// the same compatible layers on every supported OS: narrow third-party ad
+/// network rules, popup blocking, and tap-triggered redirect protection.
+/// The request rules intentionally exclude broad patterns because those can
+/// block a provider bootstrap script and leave the player blank.
 class WebViewPlayerScreen extends StatefulWidget {
   const WebViewPlayerScreen({
     super.key,
@@ -42,11 +40,14 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
   InAppWebViewController? _controller;
   late int _providerIndex;
   bool _loading = true;
+  bool _canGoBackInBrowser = false;
+  bool _playerPageReady = false;
+  final Set<String> _playerHosts = <String>{};
 
   static final List<ContentBlocker> _contentBlockers = [
-    for (final pattern in adHostUrlFilters)
+    for (final filter in embedSafeAdUrlFilters)
       ContentBlocker(
-        trigger: ContentBlockerTrigger(urlFilter: pattern),
+        trigger: ContentBlockerTrigger(urlFilter: filter),
         action: ContentBlockerAction(type: ContentBlockerActionType.BLOCK),
       ),
   ];
@@ -60,6 +61,7 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
   void initState() {
     super.initState();
     _providerIndex = widget.initialProviderIndex.clamp(0, embedProviders.length - 1);
+    _playerHosts.add(WebUri(_url).host.toLowerCase());
   }
 
   void _switchProvider(int index) {
@@ -67,8 +69,36 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
     setState(() {
       _providerIndex = index;
       _loading = true;
+      _canGoBackInBrowser = false;
+      _playerPageReady = false;
+      _playerHosts
+        ..clear()
+        ..add(WebUri(_url).host.toLowerCase());
     });
     _controller?.loadUrl(urlRequest: URLRequest(url: WebUri(_url)));
+  }
+
+  Future<void> _updateBrowserHistory(InAppWebViewController controller) async {
+    final canGoBack = await controller.canGoBack();
+    if (mounted && canGoBack != _canGoBackInBrowser) {
+      setState(() => _canGoBackInBrowser = canGoBack);
+    }
+  }
+
+  Future<void> _returnToPlayer() async {
+    final controller = _controller;
+    if (controller == null) return;
+    if (await controller.canGoBack()) {
+      await controller.goBack();
+    } else {
+      // Many ad redirects use location.replace(), which intentionally
+      // removes the player from WKWebView history. In that case a regular
+      // browser Back action cannot work, so reopen the selected provider's
+      // original embed page instead.
+      setState(() => _loading = true);
+      await controller.loadUrl(urlRequest: URLRequest(url: WebUri(_url)));
+    }
+    await _updateBrowserHistory(controller);
   }
 
   @override
@@ -88,6 +118,11 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
         ),
         title: Text('${widget.title} · ${_provider.name}', overflow: TextOverflow.ellipsis),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.reply_outlined),
+            tooltip: _canGoBackInBrowser ? 'Browser back' : 'Return to player',
+            onPressed: _returnToPlayer,
+          ),
           PopupMenuButton<int>(
             icon: const Icon(Icons.dns_outlined),
             tooltip: 'Switch server',
@@ -129,15 +164,25 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
               allowsInlineMediaPlayback: true,
               disallowOverScroll: true,
               contentBlockers: _contentBlockers,
-              userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                  '(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
             ),
-            onWebViewCreated: (controller) => _controller = controller,
+            onWebViewCreated: (controller) {
+              _controller = controller;
+              _updateBrowserHistory(controller);
+            },
             onLoadStart: (controller, url) {
               if (mounted) setState(() => _loading = true);
+              _updateBrowserHistory(controller);
             },
             onLoadStop: (controller, url) async {
+              if (url != null && !isAdOrTrackerHost(url.host)) {
+                _playerHosts.add(url.host.toLowerCase());
+              }
+              // The first completed page load is the provider's normal
+              // bootstrap. After it, an unknown top-level host is an ad
+              // takeover rather than a required embed handoff.
+              _playerPageReady = true;
               if (mounted) setState(() => _loading = false);
+              await _updateBrowserHistory(controller);
             },
             // Extra safety net on top of supportMultipleWindows: false -
             // some platforms still route certain popups through here.
@@ -146,16 +191,20 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
             onCreateWindow: (controller, createWindowAction) async => false,
             shouldOverrideUrlLoading: (controller, navigationAction) async {
               final uri = navigationAction.request.url;
-              if (uri == null) return NavigationActionPolicy.CANCEL;
-              if (isAdOrTrackerHost(uri.host)) {
+              if (uri == null || isAdOrTrackerHost(uri.host)) {
                 return NavigationActionPolicy.CANCEL;
               }
 
-              // Do not restrict a non-ad main-frame redirect here. WKWebView
-              // on iPad legitimately hands several embed providers to a
-              // different host while their player initializes; blocking that
-              // handoff produces a permanently blank white page. Popups are
-              // still blocked above and known ad/tracker hosts remain denied.
+              // Allow the provider's automatic startup/auth redirects; iPad
+              // embeds often need them. Once the player page is established,
+              // reject any top-level jump to an untrusted host. iOS reports
+              // hasGesture as null for many ad navigations, so this cannot
+              // depend on that field.
+              if (navigationAction.isForMainFrame &&
+                  _playerPageReady &&
+                  !_playerHosts.contains(uri.host.toLowerCase())) {
+                return NavigationActionPolicy.CANCEL;
+              }
               return NavigationActionPolicy.ALLOW;
             },
           ),

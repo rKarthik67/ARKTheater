@@ -52,3 +52,24 @@ bool isAdOrTrackerHost(String host) {
 /// images, XHR — never load inside the embed page, not just top-level
 /// navigations.
 List<String> get adHostUrlFilters => adHostPatterns.map((re) => re.pattern).toList();
+
+/// A deliberately narrow subset suitable for a WebView content blocker.
+///
+/// Brave's filter engine has enough context to apply large rule lists without
+/// breaking page bootstraps. WKWebView/Android WebView content rules do not:
+/// broad hostname patterns can accidentally block a provider's required
+/// script and leave the player blank. These are high-confidence, third-party
+/// ad-network URL rules shared by the embedded player on every platform.
+const embedSafeAdUrlFilters = <String>[
+  r'^https?://([^/]+\.)?doubleclick\.net/',
+  r'^https?://([^/]+\.)?googlesyndication\.com/',
+  r'^https?://([^/]+\.)?adservice\.google\.',
+  r'^https?://([^/]+\.)?popads\.net/',
+  r'^https?://([^/]+\.)?popcash\.net/',
+  r'^https?://([^/]+\.)?propellerads\.com/',
+  r'^https?://([^/]+\.)?adsterra\.com/',
+  r'^https?://([^/]+\.)?exoclick\.com/',
+  r'^https?://([^/]+\.)?trafficjunky\.net/',
+  r'^https?://([^/]+\.)?clickadu\.com/',
+  r'^https?://([^/]+\.)?onclickmega\.com/',
+];
