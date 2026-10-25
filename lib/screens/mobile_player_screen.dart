@@ -496,7 +496,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
       }
 
       final frozenFor = DateTime.now().difference(_lastProgressAt);
-      if (frozenFor > const Duration(seconds: 15) && !_showFrozenHint) {
+      if (frozenFor > const Duration(seconds: 50) && !_showFrozenHint) {
         setState(() => _showFrozenHint = true);
       }
     });

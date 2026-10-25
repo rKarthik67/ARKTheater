@@ -220,6 +220,7 @@ class _DetailScreenState extends State<DetailScreen> {
       }
       final resolvedSelection = selection!;
 
+      await context.read<WatchlistProvider>().markWatched(widget.item.type, widget.item.id);
       await context.read<RecentlyWatchedProvider>().record(item: widget.item, season: season, episode: episode);
 
       await Navigator.of(context).push(
@@ -335,6 +336,9 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   void _openWebViewEmbed(int providerIndex, {int? season, int? episode}) {
+    // An embed is still playback. Keep an already-bookmarked title at the
+    // front of this device's watchlist just like native playback does.
+    context.read<WatchlistProvider>().markWatched(widget.item.type, widget.item.id);
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => WebViewPlayerScreen(

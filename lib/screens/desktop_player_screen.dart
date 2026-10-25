@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
@@ -10,6 +11,7 @@ import '../models/media_item.dart';
 import '../models/external_subtitle.dart';
 import '../services/external_subtitle_service.dart';
 import '../services/playback_position_service.dart';
+import '../services/airplay_service.dart';
 import 'package:provider/provider.dart';
 
 import '../state/recently_watched_provider.dart';
@@ -147,6 +149,9 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
   // highlight (light yellow + "Last downloaded" label) in the picker,
   // separate from every other past pick's plain "already tried" tint.
   String? _lastDownloadedSubtitleId;
+
+  bool get _canAirPlay =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS && AirPlayService.isSupported;
 
   // User-customizable subtitle text color/background/font size. Unlike
   // mobile, mpv/media_kit needs no controller rebuild to apply a change -
@@ -373,7 +378,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
   void _armStuckTimer() {
     _stuckTimer?.cancel();
     final referencePosition = _player.state.position;
-    _stuckTimer = Timer(const Duration(seconds: 15), () {
+    _stuckTimer = Timer(const Duration(seconds: 50), () {
       if (!mounted) return;
       if (_player.state.position <= referencePosition + const Duration(milliseconds: 500)) {
         setState(() => _showStuckHint = true);
@@ -406,6 +411,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
     setState(() {
       _seeking = true;
       _confirmingSeek = true;
+      _controlsVisible = true;
       _position = target;
     });
     _player.seek(target);
@@ -920,6 +926,12 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
         ),
         title: Text('${widget.title} · ${currentProvider.displayName}', overflow: TextOverflow.ellipsis),
         actions: [
+          if (_canAirPlay)
+            IconButton(
+              icon: const Icon(Icons.airplay),
+              tooltip: 'AirPlay to TV',
+              onPressed: () => AirPlayService.showRoutePicker(),
+            ),
           IconButton(
             icon: const Icon(Icons.subtitles_outlined),
             tooltip: 'Source subtitles',
@@ -1076,7 +1088,10 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                       },
                     ),
                   ),
-                  if (!_loading && !_buffering && _controlsVisible)
+                  // Seeking/buffering must not hide the controls: the user
+                  // needs the timeline, audio and subtitle actions to remain
+                  // reachable until the stream responds.
+                  if (_controlsVisible)
                     Positioned(
                       left: 0,
                       right: 0,
@@ -1112,6 +1127,7 @@ class _DesktopPlayerScreenState extends State<DesktopPlayerScreen> {
                                     .toDouble(),
                                 onChangeStart: (_) => setState(() {
                                   _seeking = true;
+                                  _controlsVisible = true;
                                   _showStuckHint = false;
                                 }),
                                 onChanged: (v) => setState(() => _position = Duration(milliseconds: v.toInt())),

@@ -20,7 +20,7 @@ class WatchlistScreen extends StatefulWidget {
 class _WatchlistScreenState extends State<WatchlistScreen> {
   static const _sortPreferenceKey = 'ark_theater.watchlist.sort.v1';
   MediaType _mediaType = MediaType.movie;
-  WatchlistSort _sort = WatchlistSort.addedNewest;
+  WatchlistSort _sort = WatchlistSort.watchedNewest;
   final _searchController = TextEditingController();
   String _query = '';
 
@@ -188,6 +188,13 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
   Future<void> _loadSortPreference() async {
     final preferences = await SharedPreferences.getInstance();
     final saved = preferences.getString(_sortPreferenceKey);
+    // Migrate the former default so existing users immediately see the title
+    // they just played at the front. Other explicit sort choices are kept.
+    if (saved == null || saved == WatchlistSort.addedNewest.name) {
+      if (mounted) setState(() => _sort = WatchlistSort.watchedNewest);
+      await preferences.setString(_sortPreferenceKey, WatchlistSort.watchedNewest.name);
+      return;
+    }
     final sort = WatchlistSort.values.where((value) => value.name == saved);
     if (mounted && sort.isNotEmpty) {
       setState(() => _sort = sort.first);
@@ -206,6 +213,11 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       final first = a.$2;
       final second = b.$2;
       final comparison = switch (_sort) {
+        WatchlistSort.watchedNewest =>
+          (second.watchlistLastWatchedAt?.millisecondsSinceEpoch ??
+              second.watchlistAddedAt?.millisecondsSinceEpoch ?? 0)
+              .compareTo(first.watchlistLastWatchedAt?.millisecondsSinceEpoch ??
+                  first.watchlistAddedAt?.millisecondsSinceEpoch ?? 0),
         WatchlistSort.addedNewest =>
           (second.watchlistAddedAt?.millisecondsSinceEpoch ?? 0)
               .compareTo(first.watchlistAddedAt?.millisecondsSinceEpoch ?? 0),
@@ -233,6 +245,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
 }
 
 enum WatchlistSort {
+  watchedNewest('Recently watched — newest first'),
   addedNewest('Date added — newest first'),
   addedOldest('Date added — oldest first'),
   titleAscending('Title — A to Z'),

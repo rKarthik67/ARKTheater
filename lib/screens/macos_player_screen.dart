@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:video_player/video_player.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
@@ -13,6 +14,7 @@ import '../models/media_item.dart';
 import '../models/external_subtitle.dart';
 import '../services/external_subtitle_service.dart';
 import '../services/playback_position_service.dart';
+import '../services/airplay_service.dart';
 import 'package:provider/provider.dart';
 
 import '../state/recently_watched_provider.dart';
@@ -161,6 +163,10 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
   Timer? _positionSaveTimer;
   Timer? _stuckTimer;
   bool _showStuckHint = false;
+  // AVPlayer can report a short buffering transition after it has already
+  // begun rendering on iPad.  Keep a separate success flag so the initial
+  // source watchdog can never surface fallback actions over working video.
+  bool _initialPlaybackConfirmed = false;
   Duration _lastProgressPosition = Duration.zero;
   static const _displayChannel = MethodChannel('ark_theater/display');
   Timer? _gestureLabelTimer;
@@ -178,6 +184,9 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
 
   Set<String> _downloadedSubtitleIds = const {};
   String? _lastDownloadedSubtitleId;
+
+  bool get _canAirPlay =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.iOS && AirPlayService.isSupported;
 
   List<ExternalSubtitle> _externalSubtitles = const [];
   bool _fetchedExternalSubtitles = false;
@@ -273,6 +282,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
       _loading = true;
       _error = null;
       _showStuckHint = false;
+      _initialPlaybackConfirmed = false;
       _confirmingSeek = false;
       _seeking = false;
       _position = Duration.zero;
@@ -297,13 +307,19 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
         httpHeaders: _currentLink.headers ?? const {},
         formatHint: format,
       );
+      // Start the no-response watchdog before initialize().  Some iPad CDN
+      // requests can stall inside AVPlayer initialization indefinitely.
+      // Previously the timer was armed only afterwards, so that case could
+      // leave a permanent spinner; conversely a completed player could still
+      // receive a stale fallback prompt 50 seconds later.
+      _controller = controller;
+      _armStuckTimer();
       await controller.initialize();
       if (!mounted) {
         await controller.dispose();
         return;
       }
       controller.addListener(_onControllerUpdate);
-      _controller = controller;
       _duration = controller.value.duration;
 
       final subs = _result.subtitleLinks ?? const [];
@@ -344,7 +360,6 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
         ).then(_onPositionSaved));
       });
 
-      _armStuckTimer();
     } catch (err) {
       if (mounted) setState(() => _error = 'Playback failed: $err');
     } finally {
@@ -360,9 +375,18 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
       setState(() => _error = 'Playback error: ${value.errorDescription}');
       return;
     }
-    if (value.position > _lastProgressPosition + const Duration(milliseconds: 500)) {
-      _lastProgressPosition = value.position;
+    final madeProgress =
+        value.position > _lastProgressPosition + const Duration(milliseconds: 500);
+    // `isPlaying` is AVPlayer's effective playing state, not merely the
+    // user's requested play state.  Either it or real timeline progress is
+    // enough evidence that this source answered and is usable.
+    if (!_initialPlaybackConfirmed && (value.isPlaying || madeProgress)) {
+      _initialPlaybackConfirmed = true;
+      _stuckTimer?.cancel();
       if (_showStuckHint) setState(() => _showStuckHint = false);
+    }
+    if (madeProgress) {
+      _lastProgressPosition = value.position;
     }
     setState(() {
       _playing = value.isPlaying;
@@ -373,10 +397,25 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
 
   void _armStuckTimer() {
     _stuckTimer?.cancel();
-    final referencePosition = _controller?.value.position ?? Duration.zero;
-    _stuckTimer = Timer(const Duration(seconds: 15), () {
-      if (!mounted || _controller == null) return;
-      if (_controller!.value.position <= referencePosition + const Duration(milliseconds: 500)) {
+    final controller = _controller;
+    final referencePosition = controller?.value.position ?? Duration.zero;
+    // Some signed/CDN streams take a long time to deliver their first frame.
+    // Do not distract the viewer with fallback actions until a full 50s has
+    // elapsed without any playback response.
+    _stuckTimer = Timer(const Duration(seconds: 50), () {
+      if (!mounted || _initialPlaybackConfirmed) return;
+      final value = _controller?.value;
+      // A working AVPlayer may have a zero reported position briefly (for
+      // example on a live HLS edge) while already rendering. Never replace a
+      // playing stream with fallback options in that state.
+      final responded = value != null &&
+          (value.isPlaying ||
+              value.position > referencePosition + const Duration(milliseconds: 500));
+      if (responded) {
+        _initialPlaybackConfirmed = true;
+        return;
+      }
+      if (mounted) {
         setState(() => _showStuckHint = true);
       }
     });
@@ -387,13 +426,14 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
     setState(() {
       _seeking = true;
       _confirmingSeek = true;
+      _controlsVisible = true;
       _position = target;
     });
     final controller = _controller;
     if (controller == null) return;
     unawaited(controller.seekTo(target));
 
-    _stuckTimer = Timer(const Duration(seconds: 8), () {
+    _stuckTimer = Timer(const Duration(seconds: 50), () {
       if (!mounted) return;
       final current = _controller?.value.position ?? Duration.zero;
       final buffering = _controller?.value.isBuffering ?? false;
@@ -900,6 +940,12 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
           ),
           title: Text('${widget.title} · ${currentProvider.displayName}', overflow: TextOverflow.ellipsis),
           actions: [
+            if (_canAirPlay)
+              IconButton(
+                tooltip: 'AirPlay to TV',
+                icon: const Icon(Icons.airplay),
+                onPressed: () => AirPlayService.showRoutePicker(),
+              ),
             // Keep AVPlayer's video load/buffer indicator unobtrusive: it
             // belongs beside the subtitle control, not over the video.
             if (_loading || buffering || _confirmingSeek)
@@ -1099,7 +1145,10 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                         ),
                       ),
                     ),
-                  if (!_loading && !buffering && !_confirmingSeek && _controlsVisible)
+                  // Keep the timeline and player actions available while an
+                  // iPad seek buffers; hiding them made subtitle/source
+                  // controls look as if they had disappeared.
+                  if (_controlsVisible)
                     Positioned(
                       left: 0,
                       right: 0,
@@ -1131,6 +1180,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                                     .toDouble(),
                                 onChangeStart: (_) => setState(() {
                                   _seeking = true;
+                                  _controlsVisible = true;
                                   _showStuckHint = false;
                                 }),
                                 onChanged: (v) => setState(() => _position = Duration(milliseconds: v.toInt())),

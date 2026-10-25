@@ -26,6 +26,18 @@ class WatchlistProvider extends ChangeNotifier {
   bool contains(MediaType type, int id) =>
       _items.any((i) => i.type == type && i.id == id);
 
+  /// Bring an existing local bookmark to the front of the default watchlist
+  /// view when playback begins. This is local-only activity, so it is not
+  /// sent as a shared-library add/update operation.
+  Future<void> markWatched(MediaType type, int id) async {
+    final index = _items.indexWhere((item) => item.type == type && item.id == id);
+    if (index < 0) return;
+    _items[index] = _items[index].withWatchlistLastWatchedAt(DateTime.now());
+    _items = _newestFirst(_items);
+    notifyListeners();
+    await _service.save(_items);
+  }
+
   Future<void> _load() async {
     _items = _newestFirst(await _service.load());
     _loaded = true;
@@ -263,8 +275,10 @@ class WatchlistProvider extends ChangeNotifier {
   List<MediaItem> _newestFirst(List<MediaItem> items) {
     final indexed = items.indexed.toList();
     indexed.sort((a, b) {
-      final aTime = a.$2.watchlistAddedAt?.millisecondsSinceEpoch ?? 0;
-      final bTime = b.$2.watchlistAddedAt?.millisecondsSinceEpoch ?? 0;
+      final aTime = a.$2.watchlistLastWatchedAt?.millisecondsSinceEpoch ??
+          a.$2.watchlistAddedAt?.millisecondsSinceEpoch ?? 0;
+      final bTime = b.$2.watchlistLastWatchedAt?.millisecondsSinceEpoch ??
+          b.$2.watchlistAddedAt?.millisecondsSinceEpoch ?? 0;
       return bTime.compareTo(aTime) != 0
           ? bTime.compareTo(aTime)
           : _compareStableItems(a.$2, b.$2);

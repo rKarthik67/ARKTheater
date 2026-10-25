@@ -156,6 +156,7 @@ class WatchlistService {
         'voteAverage': item.voteAverage,
         'releaseDate': item.releaseDate,
         'addedAt': item.watchlistAddedAt?.toUtc().toIso8601String(),
+        'lastWatchedAt': item.watchlistLastWatchedAt?.toUtc().toIso8601String(),
       };
 
   MediaItem _fromStorageJson(Map<String, dynamic> json) => MediaItem(
@@ -166,6 +167,7 @@ class WatchlistService {
         voteAverage: (json['voteAverage'] as num?)?.toDouble() ?? 0,
         releaseDate: json['releaseDate'] as String?,
         watchlistAddedAt: DateTime.tryParse(json['addedAt'] as String? ?? '')?.toLocal(),
+        watchlistLastWatchedAt: DateTime.tryParse(json['lastWatchedAt'] as String? ?? '')?.toLocal(),
       );
 }
 
