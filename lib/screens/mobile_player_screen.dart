@@ -462,11 +462,25 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
             episode: widget.episode,
           );
       if (target != null && target > const Duration(seconds: 2)) {
-        await _controller!.seekTo(target);
-        if (fromStorage && mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Resumed from ${_formatDuration(target)}')),
-          );
+        // A provider can return a differently-cut stream (or briefly report
+        // a stale duration). AVPlayer then draws the scrubber at the saved
+        // position/end even though playback falls back to 0:00. Only seek
+        // when this source has a known duration and that position is safely
+        // inside it.
+        final sourceDuration =
+            _controller?.videoPlayerController?.value.duration;
+        final lastSafePosition = sourceDuration == null
+            ? null
+            : sourceDuration - const Duration(seconds: 5);
+        if (lastSafePosition != null &&
+            lastSafePosition > Duration.zero &&
+            target < lastSafePosition) {
+          await _controller!.seekTo(target);
+          if (fromStorage && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Resumed from ${_formatDuration(target)}')),
+            );
+          }
         }
       }
 
