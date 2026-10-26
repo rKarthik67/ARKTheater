@@ -1,0 +1,6 @@
+# Copy to android/key.properties and replace every value locally.
+# Never commit android/key.properties or the .jks keystore.
+storePassword=replace-with-keystore-password
+keyPassword=replace-with-key-password
+keyAlias=ark-theater
+storeFile=/Users/your-mac-user/Documents/ARKTheater-Keys/ark-theater-release.jks

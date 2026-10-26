@@ -47,6 +47,11 @@ app.*.map.json
 # Real secrets - never commit. .env.example (placeholder values) IS tracked.
 .env
 
+# Android release signing stays on the developer machine / in GitHub Secrets.
+android/key.properties
+*.jks
+*.keystore
+
 # Gradle's own build output (distinct from Flutter's top-level /build/).
 android/build/
 android/app/build/

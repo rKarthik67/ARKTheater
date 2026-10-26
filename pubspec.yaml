@@ -81,6 +81,9 @@ dependencies:
   # lib/screens/splash_screen.dart) - already present transitively, listed
   # directly since app code imports it.
   path_provider: ^2.1.5
+  # Reads the installed Android version so GitHub Release updates can be
+  # compared safely instead of relying on a version string duplicated in UI.
+  package_info_plus: ^9.0.1
 
   # Watchlist export/import (Settings > Library > Export/Import
   # Watchlist) - share_plus opens the native share sheet (AirDrop,

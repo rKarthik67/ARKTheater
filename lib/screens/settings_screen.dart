@@ -6,6 +6,7 @@ import '../core/app_fonts.dart';
 import '../core/theme.dart';
 import '../models/media_item.dart';
 import '../services/playback_position_service.dart';
+import '../services/github_update_service.dart';
 import '../services/watchlist_backup_service.dart';
 import '../state/recently_watched_provider.dart';
 import '../state/settings_provider.dart';
@@ -46,6 +47,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Stream source controls unlocked')),
     );
+  }
+
+  Future<void> _checkForUpdate() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final updates = GitHubUpdateService();
+    try {
+      final update = await updates.checkForUpdate();
+      if (!mounted) return;
+      if (update == null) {
+        messenger.showSnackBar(const SnackBar(content: Text('ARK Theater is up to date.')));
+        return;
+      }
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: AppTheme.surface,
+          title: Text('Version ${update.version} is ready'),
+          content: Text(
+            update.notes.trim().isEmpty
+                ? 'Download the signed APK from GitHub and open Android\'s installer?'
+                : update.notes,
+            style: AppTheme.metaStyle,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Later'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final allowed = await updates.canInstallPackages();
+                if (!allowed) {
+                  await updates.requestInstallPermission();
+                  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('Allow installs from ARK Theater, then tap Check for updates again.')),
+                  );
+                  return;
+                }
+                if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+                messenger.showSnackBar(const SnackBar(content: Text('Downloading update…')));
+                try {
+                  await updates.downloadAndInstall(update);
+                } catch (_) {
+                  if (mounted) {
+                    messenger.showSnackBar(const SnackBar(content: Text('Update download failed. Please try again.')));
+                  }
+                }
+              },
+              child: const Text('Download update'),
+            ),
+          ],
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        messenger.showSnackBar(const SnackBar(content: Text('Could not check GitHub for updates.')));
+      }
+    }
   }
 
   @override
@@ -443,6 +503,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   const _CardHeader(icon: Icons.info_outline, title: 'ARK Theater'),
                   const SizedBox(height: 8),
                   const Text('Version $_kAppVersion', style: AppTheme.metaStyle),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: _checkForUpdate,
+                    icon: const Icon(Icons.system_update_outlined),
+                    label: const Text('Check for Android update'),
+                  ),
                   const SizedBox(height: 6),
                   const Text(
                     'Title data, artwork, and cast information provided by '
