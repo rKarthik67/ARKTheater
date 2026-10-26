@@ -103,7 +103,7 @@ class MediaRow extends StatelessWidget {
                 );
                 if (!ranked) return card;
                 return SizedBox(
-                  width: width + 46,
+                  width: width + 57,
                   child: Stack(
                     clipBehavior: Clip.none,
                     children: [
@@ -125,7 +125,7 @@ class MediaRow extends StatelessWidget {
                       ),
                       // Keep the large rank visibly to the left of the
                       // poster rather than sitting over its artwork.
-                      Positioned(left: 44, top: 0, child: card),
+                      Positioned(left: 55, top: 0, child: card),
                     ],
                   ),
                 );
