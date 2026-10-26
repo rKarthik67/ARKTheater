@@ -292,6 +292,10 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
           // it cannot mix the two sets together.
           enableSubtitles: false,
           enableSkips: true,
+          // Keep Better Player's native HLS/DASH audio-track support on.
+          // Some manifests expose their dubs as internal tracks rather than
+          // separate scraper links.
+          enableAudioTracks: true,
           overflowMenuCustomItems: [
             BetterPlayerOverflowMenuItem(
               Icons.subtitles_outlined,
@@ -314,10 +318,13 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                 'Switch provider',
                 _showProviderSwitcher,
               ),
-            if (audioLabelsForLinks(_result.videoLinks ?? const []).length > 1)
+            // Always expose the current source language when it is known.
+            // VidSync can temporarily return only one dub; hiding the item
+            // in that case made the language capability appear to vanish.
+            if ((_result.videoLinks ?? const []).isNotEmpty)
               BetterPlayerOverflowMenuItem(
                 Icons.headphones_outlined,
-                'Switch audio',
+                'Audio & language',
                 _showAudioSwitcher,
               ),
             BetterPlayerOverflowMenuItem(
@@ -645,7 +652,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
             shrinkWrap: true,
             children: [
               const ListTile(
-                title: Text('Switch audio', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                title: Text('Audio & language', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
               ),
               for (final label in labels)
                 ListTile(
