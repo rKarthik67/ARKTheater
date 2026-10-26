@@ -255,7 +255,9 @@ class TmdbService {
         ? detailsJson['runtime'] as int?
         : (detailsJson['episode_run_time'] as List?)?.cast<int>().firstOrNull;
     final cast = (creditsJson['cast'] as List? ?? [])
-        .take(12)
+        // TMDB returns the full credited cast. Keep a useful browseable
+        // selection rather than stopping after the old 12-card preview.
+        .take(30)
         .map((c) => CastMember.fromJson(c as Map<String, dynamic>))
         .toList();
     String? collectionName;

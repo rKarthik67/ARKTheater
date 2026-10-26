@@ -53,6 +53,7 @@ Future<List<T>> _runWithLimitedConcurrency<T>(
 /// meant to be skimmed, not deeply browsed (that's what the Movies/TV Shows
 /// tabs and "View more" are for).
 const _kRowCap = 15;
+const _kTopRankedRowCap = 20;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, required this.onSelect});
@@ -201,8 +202,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               if (data.trendingMovies.isNotEmpty)
                 MediaRow(
-                  title: 'Trending Movies',
-                  items: data.trendingMovies.take(_kRowCap).toList(),
+                  title: 'Top 20 Movies',
+                  items: data.trendingMovies.take(_kTopRankedRowCap).toList(),
+                  ranked: true,
                   onItemTap: widget.onSelect,
                   onViewMore: () => _openBrowse(
                     'Trending Movies',
@@ -229,8 +231,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               if (data.trendingTv.isNotEmpty)
                 MediaRow(
-                  title: 'Trending TV Shows',
-                  items: data.trendingTv.take(_kRowCap).toList(),
+                  title: 'Top 20 TV Shows',
+                  items: data.trendingTv.take(_kTopRankedRowCap).toList(),
+                  ranked: true,
                   onItemTap: widget.onSelect,
                   onViewMore: () => _openBrowse(
                     'Trending TV Shows',

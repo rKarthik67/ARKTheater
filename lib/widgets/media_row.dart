@@ -17,6 +17,7 @@ class MediaRow extends StatelessWidget {
     required this.onItemTap,
     this.onViewMore,
     this.onItemRemove,
+    this.ranked = false,
   });
 
   final String title;
@@ -33,6 +34,10 @@ class MediaRow extends StatelessWidget {
   /// used by rows a title can be individually removed from (Home's
   /// "Recently Watched" row), left off everywhere else.
   final void Function(MediaItem)? onItemRemove;
+
+  /// Gives a trending rail the large outlined rank treatment used by ranked
+  /// streaming rows. The data remains the existing TMDB trending order.
+  final bool ranked;
 
   @override
   Widget build(BuildContext context) {
@@ -84,12 +89,39 @@ class MediaRow extends StatelessWidget {
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (context, index) {
                 final item = items[index];
-                return SizedBox(
-                  width: cardWidth.clamp(110, 220),
+                final width = cardWidth.clamp(110, 220).toDouble();
+                final card = SizedBox(
+                  width: width,
                   child: MediaCard(
                     item: item,
                     onTap: () => onItemTap(item),
                     onRemove: onItemRemove == null ? null : () => onItemRemove!(item),
+                  ),
+                );
+                if (!ranked) return card;
+                return SizedBox(
+                  width: width + 28,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      Positioned(
+                        left: 0,
+                        bottom: 31,
+                        child: Text(
+                          '${index + 1}',
+                          style: TextStyle(
+                            fontSize: 76,
+                            height: 0.9,
+                            fontWeight: FontWeight.w900,
+                            foreground: Paint()
+                              ..style = PaintingStyle.stroke
+                              ..strokeWidth = 2
+                              ..color = AppTheme.resolvedAccent(context),
+                          ),
+                        ),
+                      ),
+                      Positioned(left: 26, top: 0, child: card),
+                    ],
                   ),
                 );
               },
