@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
 
 import '../core/responsive.dart';
@@ -15,11 +16,6 @@ import '../widgets/fade_in_on_scroll.dart';
 import 'platforms_screen.dart' show kWatchRegions;
 import 'stream_sources_screen.dart';
 import 'watchlist_screen.dart';
-
-/// App version, shown in About. Kept in sync by hand with pubspec.yaml's
-/// `version:` - reading it at runtime would mean adding package_info_plus
-/// as a dependency just for one line of text.
-const _kAppVersion = '1.0.0';
 
 /// Settings tab - replaces the old standalone "Watchlist" bottom-nav
 /// entry. The watchlist itself moved here (first list tile below) rather
@@ -38,6 +34,18 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   int _settingsTitleTaps = 0;
   bool _showStreamSources = false;
+  String _installedVersion = '…';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadInstalledVersion();
+  }
+
+  Future<void> _loadInstalledVersion() async {
+    final package = await PackageInfo.fromPlatform();
+    if (mounted) setState(() => _installedVersion = package.version);
+  }
 
   void _handleSettingsTitleTap() {
     if (_showStreamSources) return;
@@ -502,7 +510,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const _CardHeader(icon: Icons.info_outline, title: 'ARK Theater'),
                   const SizedBox(height: 8),
-                  const Text('Version $_kAppVersion', style: AppTheme.metaStyle),
+                  Text('Version $_installedVersion', style: AppTheme.metaStyle),
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
                     onPressed: _checkForUpdate,

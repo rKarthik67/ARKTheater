@@ -40,6 +40,19 @@ jobs:
           storeFile=$RUNNER_TEMP/ark-theater-release.jks
           EOF
 
+      - name: Create private runtime configuration
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+          WYZIE_SUBS_API_KEY: ${{ secrets.WYZIE_SUBS_API_KEY }}
+        run: |
+          test -n "$TMDB_API_KEY"
+          cat > .env <<EOF
+          TMDB_API_KEY=$TMDB_API_KEY
+          WYZIE_SUBS_API_KEY=$WYZIE_SUBS_API_KEY
+          SCRAPER_BASE_URL=https://arkscraper.duckdns.org
+          SHARED_WATCHLIST_BASE_URL=https://arkscraper.duckdns.org
+          EOF
+
       - name: Build signed APK
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
