@@ -304,6 +304,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
 
+          _SettingsCard(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _CardHeader(icon: Icons.play_circle_outline, title: 'Player Controls Color'),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Colors the mobile player timeline, loading indicator, and menus. '
+                    'The first swatch follows your app accent. Open a new video after changing it.',
+                    style: AppTheme.metaStyle,
+                  ),
+                  const SizedBox(height: 12),
+                  _ColorSwatchRow(
+                    selected: settings.playerAccentColor,
+                    defaultColor: settings.accentColor ?? AppTheme.accent,
+                    onSelect: (color) => settings.setPlayerAccentColor(color),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
           // ---------------------------------------------------------------
           const _SectionLabel('Motion'),
           _SettingsCard(

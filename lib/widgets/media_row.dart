@@ -86,7 +86,10 @@ class MediaRow extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: items.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              // Ranked cards have a large number sitting behind the poster;
+              // give each one more breathing room so numbers and posters
+              // never visually run into the next title.
+              separatorBuilder: (_, __) => SizedBox(width: ranked ? 32 : 12),
               itemBuilder: (context, index) {
                 final item = items[index];
                 final width = cardWidth.clamp(110, 220).toDouble();

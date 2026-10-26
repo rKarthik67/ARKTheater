@@ -34,6 +34,7 @@ extension EntranceAnimationStyleDetails on EntranceAnimationStyle {
 class SettingsProvider extends ChangeNotifier {
   static const _glassOpacityScaleKey = 'settings_glass_opacity_scale';
   static const _accentColorKey = 'settings_accent_color';
+  static const _playerAccentColorKey = 'settings_player_accent_color';
   static const _fontFamilyKeyPrefix = 'settings_font_family_';
   static const _fontColorKeyPrefix = 'settings_font_color_';
   static const _reduceMotionKey = 'settings_reduce_motion';
@@ -68,6 +69,12 @@ class SettingsProvider extends ChangeNotifier {
   /// (AppTheme.accent) - see AppTheme.themeFor().
   Color? _accentColor;
   Color? get accentColor => _accentColor;
+
+  /// `null` means that player controls follow the app accent. A separate
+  /// override lets the video UI keep its own identity without recoloring the
+  /// rest of ARK Theater.
+  Color? _playerAccentColor;
+  Color? get playerAccentColor => _playerAccentColor;
 
   /// `null` per category means "use that category's app-default style" -
   /// see AppTheme.resolvedStyle().
@@ -133,6 +140,10 @@ class SettingsProvider extends ChangeNotifier {
       final accentValue = prefs.getInt(_accentColorKey);
       if (accentValue != null) {
         _accentColor = Color(accentValue);
+      }
+      final playerAccentValue = prefs.getInt(_playerAccentColorKey);
+      if (playerAccentValue != null) {
+        _playerAccentColor = Color(playerAccentValue);
       }
       _reduceMotion = prefs.getBool(_reduceMotionKey) ?? false;
       final scale = prefs.getDouble(_textScaleKey);
@@ -201,6 +212,22 @@ class SettingsProvider extends ChangeNotifier {
         await prefs.remove(_accentColorKey);
       } else {
         await prefs.setInt(_accentColorKey, color.value);
+      }
+    } catch (_) {
+      // Best-effort persistence.
+    }
+  }
+
+  /// Pass `null` to make video controls follow the app accent again.
+  Future<void> setPlayerAccentColor(Color? color) async {
+    _playerAccentColor = color;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (color == null) {
+        await prefs.remove(_playerAccentColorKey);
+      } else {
+        await prefs.setInt(_playerAccentColorKey, color.value);
       }
     } catch (_) {
       // Best-effort persistence.

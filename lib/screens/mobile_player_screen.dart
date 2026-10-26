@@ -14,6 +14,7 @@ import '../services/playback_position_service.dart';
 import 'package:provider/provider.dart';
 
 import '../state/recently_watched_provider.dart';
+import '../state/settings_provider.dart';
 import '../services/subtitle_download_history_service.dart';
 import '../services/subtitle_style_service.dart';
 import '../utils/subtitle_sync.dart';
@@ -244,6 +245,9 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
   }
 
   void _setupController({Duration? resumeAt, bool preserveActiveSubtitle = false}) {
+    final settings = context.read<SettingsProvider>();
+    final playerAccent =
+        settings.playerAccentColor ?? settings.accentColor ?? AppTheme.accent;
     _controller = BetterPlayerController(
       BetterPlayerConfiguration(
         autoPlay: true,
@@ -257,10 +261,30 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
           backgroundColor: _subtitleStyle.backgroundColor,
         ),
         controlsConfiguration: BetterPlayerControlsConfiguration(
-          // Default is Colors.black87 - noticeably darker than most
-          // players' tap-to-reveal overlay. Lightened to 40% opacity so
-          // the video stays more visible behind the controls.
-          controlBarColor: Colors.black.withOpacity(0.4),
+          // A cinema-style, low-profile control rail: rounded familiar
+          // transport symbols, a readable dark scrim, and a single user
+          // chosen highlight color. This is intentionally configuration-only
+          // so the existing resilient BetterPlayer playback behavior stays
+          // untouched.
+          controlBarColor: Colors.black.withOpacity(0.54),
+          textColor: Colors.white,
+          iconsColor: Colors.white,
+          playIcon: Icons.play_arrow_rounded,
+          pauseIcon: Icons.pause_rounded,
+          skipBackIcon: Icons.replay_10_rounded,
+          skipForwardIcon: Icons.forward_10_rounded,
+          fullscreenEnableIcon: Icons.fullscreen_rounded,
+          fullscreenDisableIcon: Icons.fullscreen_exit_rounded,
+          overflowMenuIcon: Icons.more_vert_rounded,
+          progressBarPlayedColor: playerAccent,
+          progressBarHandleColor: playerAccent,
+          progressBarBufferedColor: Colors.white54,
+          progressBarBackgroundColor: Colors.white24,
+          loadingColor: playerAccent,
+          overflowModalColor: const Color(0xFF171717),
+          overflowModalTextColor: Colors.white,
+          overflowMenuIconsColor: playerAccent,
+          controlBarHeight: 56,
           enableFullscreen: true,
           enablePlaybackSpeed: true,
           // Source subtitles and searched subtitles deliberately have their
