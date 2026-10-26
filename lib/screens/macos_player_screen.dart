@@ -167,10 +167,12 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
   // begun rendering on iPad.  Keep a separate success flag so the initial
   // source watchdog can never surface fallback actions over working video.
   bool _initialPlaybackConfirmed = false;
+  Duration? _pendingSeekTarget;
   Duration _lastProgressPosition = Duration.zero;
   static const _displayChannel = MethodChannel('ark_theater/display');
   Timer? _gestureLabelTimer;
   bool _controlsVisible = true;
+  final FocusNode _keyboardFocusNode = FocusNode(debugLabel: 'player-controls');
   double _brightness = 0.5;
   String? _gestureLabel;
 
@@ -283,6 +285,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
       _error = null;
       _showStuckHint = false;
       _initialPlaybackConfirmed = false;
+      _pendingSeekTarget = null;
       _confirmingSeek = false;
       _seeking = false;
       _position = Duration.zero;
@@ -388,7 +391,27 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
     if (madeProgress) {
       _lastProgressPosition = value.position;
     }
+    final pendingSeekTarget = _pendingSeekTarget;
+    // AVPlayer on iPad may leave isBuffering true for the remainder of an
+    // HLS segment even though it has resumed rendering. A playing player is
+    // therefore a successful seek for our UI purposes; do not make the user
+    // wait for that buffering flag to become false.
+    final seekFinished = _confirmingSeek &&
+        (value.isPlaying ||
+            (pendingSeekTarget != null &&
+                (value.position - pendingSeekTarget).abs() <=
+                    const Duration(seconds: 6)));
+    final clearFallback = _showStuckHint && (value.isPlaying || madeProgress);
+    if (seekFinished) {
+      _stuckTimer?.cancel();
+    }
     setState(() {
+      if (seekFinished) {
+        _seeking = false;
+        _confirmingSeek = false;
+        _pendingSeekTarget = null;
+      }
+      if (clearFallback || seekFinished) _showStuckHint = false;
       _playing = value.isPlaying;
       _duration = value.duration;
       if (!_seeking) _position = value.position;
@@ -426,6 +449,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
     setState(() {
       _seeking = true;
       _confirmingSeek = true;
+      _pendingSeekTarget = target;
       _controlsVisible = true;
       _position = target;
     });
@@ -435,13 +459,18 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
 
     _stuckTimer = Timer(const Duration(seconds: 50), () {
       if (!mounted) return;
-      final current = _controller?.value.position ?? Duration.zero;
-      final buffering = _controller?.value.isBuffering ?? false;
-      final onTarget = (current - target).abs() <= const Duration(seconds: 6) && !buffering;
+      final value = _controller?.value;
+      final current = value?.position ?? Duration.zero;
+      final onTarget = (current - target).abs() <= const Duration(seconds: 6);
+      // iPad AVPlayer can retain isBuffering=true while it is visibly
+      // rendering. Treat effective playback as a response even if a CDN
+      // segment has not fully filled its buffer yet.
+      final responded = onTarget || (value?.isPlaying ?? false);
       setState(() {
         _seeking = false;
         _confirmingSeek = false;
-        _showStuckHint = !onTarget;
+        _pendingSeekTarget = null;
+        _showStuckHint = !responded;
       });
     });
   }
@@ -459,6 +488,23 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
       await controller.pause();
     } else {
       await controller.play();
+    }
+  }
+
+  void _handleKeyboardEvent(KeyEvent event) {
+    // Hardware keyboard support for iPad (and macOS). Handle only key-down
+    // events so holding a key does not toggle play/pause repeatedly.
+    if (event is! KeyDownEvent) return;
+    final key = event.logicalKey;
+    if (key == LogicalKeyboardKey.space || key == LogicalKeyboardKey.mediaPlayPause) {
+      setState(() => _controlsVisible = true);
+      unawaited(_togglePlayPause());
+    } else if (key == LogicalKeyboardKey.arrowLeft) {
+      setState(() => _controlsVisible = true);
+      _skip(const Duration(seconds: -10));
+    } else if (key == LogicalKeyboardKey.arrowRight) {
+      setState(() => _controlsVisible = true);
+      _skip(const Duration(seconds: 10));
     }
   }
 
@@ -875,6 +921,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
     _gestureLabelTimer?.cancel();
     _stuckTimer?.cancel();
     _positionSaveTimer?.cancel();
+    _keyboardFocusNode.dispose();
     final controller = _controller;
     if (controller != null) {
       controller.removeListener(_onControllerUpdate);
@@ -907,7 +954,11 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
       onPopInvoked: (didPop) {
         if (!didPop) _handleBack();
       },
-      child: Scaffold(
+      child: KeyboardListener(
+        focusNode: _keyboardFocusNode,
+        autofocus: true,
+        onKeyEvent: _handleKeyboardEvent,
+        child: Scaffold(
         backgroundColor: Colors.black,
         // The player must be laid out against the complete display.  On
         // iPad, reserving the AppBar's height moves the body's visual centre
@@ -948,7 +999,8 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
               ),
             // Keep AVPlayer's video load/buffer indicator unobtrusive: it
             // belongs beside the subtitle control, not over the video.
-            if (_loading || buffering || _confirmingSeek)
+            if (_loading || _confirmingSeek ||
+                (buffering && !(_controller?.value.isPlaying ?? false)))
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 8),
                 child: SizedBox(
@@ -1109,7 +1161,17 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                   Positioned.fill(
                     child: GestureDetector(
                       behavior: HitTestBehavior.translucent,
-                      onTap: () => setState(() => _controlsVisible = !_controlsVisible),
+                      onTap: () {
+                        _keyboardFocusNode.requestFocus();
+                        setState(() => _controlsVisible = !_controlsVisible);
+                      },
+                      onDoubleTapDown: (details) {
+                        _keyboardFocusNode.requestFocus();
+                        final width = MediaQuery.sizeOf(context).width;
+                        _skip(details.localPosition.dx < width / 2
+                            ? const Duration(seconds: -10)
+                            : const Duration(seconds: 10));
+                      },
                       onVerticalDragUpdate: (details) =>
                           _adjustVerticalControl(details, MediaQuery.sizeOf(context)),
                     ),
@@ -1275,8 +1337,9 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                     ),
                 ],
               ),
-      ),
-    );
+            ),
+          ),
+      );
   }
 }
 

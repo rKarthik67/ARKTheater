@@ -22,6 +22,7 @@ const embedProviders = <EmbedProvider>[
   EmbedProvider(name: 'Videasy', movieUrl: _videasyMovie, tvUrl: _videasyTv),
   EmbedProvider(name: 'VidLink', movieUrl: _vidlinkMovie, tvUrl: _vidlinkTv),
   EmbedProvider(name: 'VidSrcMe', movieUrl: _vidsrcMeMovie, tvUrl: _vidsrcMeTv),
+  EmbedProvider(name: 'VidSrc V2', movieUrl: _vidsrcV2Movie, tvUrl: _vidsrcV2Tv),
   EmbedProvider(name: 'VidCore', movieUrl: _vidcoreMovie, tvUrl: _vidcoreTv),
   EmbedProvider(name: 'Codeera', movieUrl: _codeeraMovie, tvUrl: _codeeraTv),
   EmbedProvider(name: 'VidRift', movieUrl: _vidriftMovie, tvUrl: _vidriftTv),
@@ -35,6 +36,9 @@ String _vidlinkTv(int id, int s, int e) => 'https://vidlink.pro/tv/$id/$s/$e';
 
 String _vidsrcMeMovie(int id) => 'https://vidsrcme.ru/embed/movie/$id';
 String _vidsrcMeTv(int id, int s, int e) => 'https://vidsrcme.ru/embed/tv?tmdb=$id&season=$s&episode=$e';
+
+String _vidsrcV2Movie(int id) => 'https://embed.vidsrc.pk/movies/$id';
+String _vidsrcV2Tv(int id, int s, int e) => 'https://embed.vidsrc.pk/tv/$id/$s/$e';
 
 String _vidcoreMovie(int id) => 'https://vidcore.org/embed/movie/$id';
 String _vidcoreTv(int id, int s, int e) => 'https://vidcore.org/embed/tv/$id/$s/$e';
