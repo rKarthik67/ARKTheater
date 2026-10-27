@@ -241,11 +241,13 @@ class TmdbService {
       _dio.get(path, queryParameters: _auth),
       _dio.get('$path/credits', queryParameters: _auth),
       _dio.get('$path/similar', queryParameters: _auth),
+      _dio.get('$path/recommendations', queryParameters: _auth),
     ]);
 
     final detailsJson = results[0].data as Map<String, dynamic>;
     final creditsJson = results[1].data as Map<String, dynamic>;
     final similarJson = results[2].data as Map<String, dynamic>;
+    final recommendationsJson = results[3].data as Map<String, dynamic>;
 
     final item = MediaItem.fromTmdbJson(detailsJson, type);
     final genres = (detailsJson['genres'] as List? ?? [])
@@ -284,9 +286,17 @@ class TmdbService {
         // temporarily unavailable, so do not fail the entire page.
       }
     }
-    final similar = (similarJson['results'] as List? ?? [])
-        .map((s) => MediaItem.fromTmdbJson(s as Map<String, dynamic>, type))
-        .toList();
+    // TMDB's two related-title signals complement one another:
+    // recommendations are its stronger editorial/behavioural match, while
+    // similar provides useful genre/cast/franchise-adjacent discoveries.
+    // Alternate them exactly like FlixQuest's "More Like This" logic, remove
+    // duplicates, and never show the title currently open.
+    final similar = _mergeRelatedTitles(
+      id,
+      type,
+      recommendationsJson['results'] as List? ?? const [],
+      similarJson['results'] as List? ?? const [],
+    );
     final seasons = type == MediaType.tv
         ? (detailsJson['seasons'] as List? ?? [])
             .map((s) => SeasonSummary.fromJson(s as Map<String, dynamic>))
@@ -304,6 +314,36 @@ class TmdbService {
       similar: similar,
       seasons: seasons,
     );
+  }
+
+  List<MediaItem> _mergeRelatedTitles(
+    int currentId,
+    MediaType type,
+    List<dynamic> recommendations,
+    List<dynamic> similar,
+  ) {
+    final recommendationItems = recommendations
+        .whereType<Map<String, dynamic>>()
+        .map((item) => MediaItem.fromTmdbJson(item, type))
+        .toList(growable: false);
+    final similarItems = similar
+        .whereType<Map<String, dynamic>>()
+        .map((item) => MediaItem.fromTmdbJson(item, type))
+        .toList(growable: false);
+    final seen = <int>{currentId};
+    final merged = <MediaItem>[];
+    final longest = recommendationItems.length > similarItems.length
+        ? recommendationItems.length
+        : similarItems.length;
+
+    for (var index = 0; index < longest; index++) {
+      for (final source in [recommendationItems, similarItems]) {
+        if (index >= source.length) continue;
+        final item = source[index];
+        if (seen.add(item.id)) merged.add(item);
+      }
+    }
+    return merged;
   }
 
   /// Episodes for one season - powers the poster-style episode picker on

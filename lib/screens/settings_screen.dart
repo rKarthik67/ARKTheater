@@ -14,6 +14,7 @@ import '../state/settings_provider.dart';
 import '../state/watchlist_provider.dart';
 import '../widgets/fade_in_on_scroll.dart';
 import 'platforms_screen.dart' show kWatchRegions;
+import 'provider_status_screen.dart';
 import 'stream_sources_screen.dart';
 import 'watchlist_screen.dart';
 
@@ -540,6 +541,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onPressed: _checkForUpdate,
                     icon: const Icon(Icons.system_update_outlined),
                     label: const Text('Check for Android update'),
+                  ),
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ProviderStatusScreen(),
+                      ),
+                    ),
+                    icon: const Icon(Icons.monitor_heart_outlined),
+                    label: const Text('Check provider status'),
                   ),
                   const SizedBox(height: 6),
                   const Text(

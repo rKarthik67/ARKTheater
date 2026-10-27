@@ -138,6 +138,43 @@ class _DetailScreenState extends State<DetailScreen> {
     }
   }
 
+  /// Reads the scraper's latest scheduled health snapshot immediately before
+  /// Auto starts resolving a title. Health is advisory (a provider can be
+  /// online generally but lack this particular title), so offline providers
+  /// remain as a last fallback; actual title-level loading still decides the
+  /// final playable source.
+  Future<List<VideoProvider>> _providersForAuto(
+    List<VideoProvider> providers,
+  ) async {
+    try {
+      final health = await ScraperApi(AppConfig.scraperBaseUrl)
+          .getProviderHealthStatus();
+      final statusById = {
+        for (final provider in health.providers) provider.id: provider,
+      };
+      final online = <VideoProvider>[];
+      final unknown = <VideoProvider>[];
+      final offline = <VideoProvider>[];
+      for (final provider in providers) {
+        final state = statusById[provider.apiId ?? ''];
+        if (state?.isOnline == true) {
+          online.add(provider);
+        } else if (state?.isOffline == true) {
+          offline.add(provider);
+        } else {
+          unknown.add(provider);
+        }
+      }
+      // Do not let an old all-offline snapshot make Auto give up. The
+      // following actual stream loads are the final, title-specific test.
+      return online.isEmpty ? providers : [...online, ...unknown, ...offline];
+    } catch (_) {
+      // Status is helpful but never blocks playback if the status endpoint
+      // itself is temporarily unavailable.
+      return providers;
+    }
+  }
+
   Future<void> _play({
     int? season,
     int? episode,
@@ -183,8 +220,11 @@ class _DetailScreenState extends State<DetailScreen> {
 
       final ProviderSelection? selection;
       if (selectedIndex == -1) {
+        setState(() => _resolvingStatus = 'Checking provider status...');
+        final autoProviders = await _providersForAuto(providers);
+        if (!mounted) return;
         selection = await ProviderLoader.loadFirstSuccessful(
-          providers: providers,
+          providers: autoProviders,
           load: load,
           onResult: (index, provider, result) {
             if (!mounted) return;
@@ -218,7 +258,16 @@ class _DetailScreenState extends State<DetailScreen> {
         );
         return;
       }
-      final resolvedSelection = selection!;
+      final autoSelectedProvider = selection!;
+      // Auto may reorder sources using health data. PlayerScreen still needs
+      // an index into the original provider list for its switcher.
+      final resolvedSelection = selectedIndex == -1
+          ? ProviderSelection(
+              index: providers.indexOf(autoSelectedProvider.provider),
+              provider: autoSelectedProvider.provider,
+              result: autoSelectedProvider.result,
+            )
+          : autoSelectedProvider;
 
       await context.read<WatchlistProvider>().markWatched(widget.item.type, widget.item.id);
       await context.read<RecentlyWatchedProvider>().record(item: widget.item, season: season, episode: episode);
@@ -248,6 +297,10 @@ class _DetailScreenState extends State<DetailScreen> {
   }
 
   Future<_StreamChoice?> _showProviderPicker(List<VideoProvider> providers) {
+    // Fetch once for this picker opening. This is the same server-side
+    // snapshot Auto consults immediately after the user selects it.
+    final healthFuture = ScraperApi(AppConfig.scraperBaseUrl)
+        .getProviderHealthStatus();
     return showModalBottomSheet<_StreamChoice>(
       context: context,
       showDragHandle: true,
@@ -255,73 +308,99 @@ class _DetailScreenState extends State<DetailScreen> {
       builder: (sheetContext) => SafeArea(
         child: SizedBox(
           height: MediaQuery.sizeOf(sheetContext).height * .62,
-          child: DefaultTabController(
-            length: 2,
-            child: Column(
-              children: [
-                const ListTile(
-                  title: Text('Choose a stream source', style: AppTheme.sectionHeaderStyle),
-                ),
-                const TabBar(
-                  tabs: [
-                    Tab(text: 'Scraper streams'),
-                    Tab(text: 'Embeds'),
+          child: FutureBuilder<ProviderHealthSnapshot>(
+            future: healthFuture,
+            builder: (context, healthSnapshot) {
+              final healthById = {
+                for (final provider in healthSnapshot.data?.providers ?? const <ProviderHealthResult>[])
+                  provider.id: provider,
+              };
+              return DefaultTabController(
+                length: 2,
+                child: Column(
+                  children: [
+                    const ListTile(
+                      title: Text('Choose a stream source', style: AppTheme.sectionHeaderStyle),
+                    ),
+                    const TabBar(
+                      tabs: [
+                        Tab(text: 'Scraper streams'),
+                        Tab(text: 'Embeds'),
+                      ],
+                    ),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          ListView(
+                            children: [
+                              if (healthSnapshot.connectionState == ConnectionState.waiting)
+                                const ListTile(
+                                  leading: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                  title: Text('Checking provider status…'),
+                                )
+                              else if (healthSnapshot.hasError)
+                                const ListTile(
+                                  leading: Icon(Icons.cloud_off_outlined, color: AppTheme.warning),
+                                  title: Text('Provider status unavailable'),
+                                  subtitle: Text('Auto will still test sources directly.', style: AppTheme.metaStyle),
+                                ),
+                              if (providers.isNotEmpty) ...[
+                                ListTile(
+                                  leading: const Icon(Icons.auto_awesome, color: AppTheme.accent),
+                                  title: const Text('Auto'),
+                                  subtitle: Text(
+                                    healthSnapshot.data == null
+                                        ? 'Tests sources directly to find a playable one'
+                                        : '${healthSnapshot.data!.online}/${healthSnapshot.data!.total} providers online · checks this title next',
+                                    style: AppTheme.metaStyle,
+                                  ),
+                                  onTap: () => Navigator.of(sheetContext)
+                                      .pop(const _StreamChoice.scraper(-1)),
+                                ),
+                                const Divider(height: 1, color: AppTheme.border),
+                                for (var index = 0;
+                                    index < providers.length;
+                                    index++)
+                                  _ProviderChoiceTile(
+                                    provider: providers[index],
+                                    health: healthById[providers[index].apiId ?? ''],
+                                    onTap: () => Navigator.of(sheetContext)
+                                        .pop(_StreamChoice.scraper(index)),
+                                  ),
+                              ] else
+                                const ListTile(
+                                  leading: Icon(Icons.cloud_off_outlined, color: AppTheme.textSecondary),
+                                  title: Text('No scraper streams available'),
+                                  subtitle: Text('Check the scraper connection, or choose an embed.', style: AppTheme.metaStyle),
+                                ),
+                            ],
+                          ),
+                          ListView(
+                            children: [
+                              const ListTile(
+                                title: Text('Embeds'),
+                                subtitle: Text('Open a provider in the embedded player.', style: AppTheme.metaStyle),
+                              ),
+                              for (var index = 0; index < embedProviders.length; index++)
+                                ListTile(
+                                  leading: const Icon(Icons.open_in_browser_outlined, color: AppTheme.textSecondary),
+                                  title: Text(embedProviders[index].name),
+                                  subtitle: const Text('Open embed player', style: AppTheme.metaStyle),
+                                  onTap: () => Navigator.of(sheetContext).pop(_StreamChoice.embed(index)),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-                Expanded(
-                  child: TabBarView(
-                    children: [
-                      ListView(
-                        children: [
-                          if (providers.isNotEmpty) ...[
-                            const ListTile(
-                              title: Text('Scraper streams'),
-                              subtitle: Text('Auto tries these sources in order.', style: AppTheme.metaStyle),
-                            ),
-                            ListTile(
-                              leading: const Icon(Icons.auto_awesome, color: AppTheme.accent),
-                              title: const Text('Auto'),
-                              subtitle: const Text('Find the first available source', style: AppTheme.metaStyle),
-                              onTap: () => Navigator.of(sheetContext).pop(const _StreamChoice.scraper(-1)),
-                            ),
-                            const Divider(height: 1, color: AppTheme.border),
-                            for (var index = 0; index < providers.length; index++)
-                              ListTile(
-                                leading: const Icon(Icons.play_circle_outline, color: AppTheme.textSecondary),
-                                title: Text(providers[index].displayName),
-                                subtitle: providers[index].content?.isNotEmpty == true
-                                    ? Text(providers[index].content!, style: AppTheme.metaStyle)
-                                    : null,
-                                onTap: () => Navigator.of(sheetContext).pop(_StreamChoice.scraper(index)),
-                              ),
-                          ] else
-                            const ListTile(
-                              leading: Icon(Icons.cloud_off_outlined, color: AppTheme.textSecondary),
-                              title: Text('No scraper streams available'),
-                              subtitle: Text('Check the scraper connection, or choose an embed.', style: AppTheme.metaStyle),
-                            ),
-                        ],
-                      ),
-                      ListView(
-                        children: [
-                          const ListTile(
-                            title: Text('Embeds'),
-                            subtitle: Text('Open a provider in the embedded player.', style: AppTheme.metaStyle),
-                          ),
-                          for (var index = 0; index < embedProviders.length; index++)
-                            ListTile(
-                              leading: const Icon(Icons.open_in_browser_outlined, color: AppTheme.textSecondary),
-                              title: Text(embedProviders[index].name),
-                              subtitle: const Text('Open embed player', style: AppTheme.metaStyle),
-                              onTap: () => Navigator.of(sheetContext).pop(_StreamChoice.embed(index)),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
@@ -566,7 +645,7 @@ class _DetailScreenState extends State<DetailScreen> {
                 child: FadeInOnScroll(
                   delay: const Duration(milliseconds: 80),
                   child: MediaRow(
-                    title: 'Similar Titles',
+                    title: 'More Like This',
                     items: detail.similar,
                     onItemTap: widget.onSelectRelated,
                   ),
@@ -577,6 +656,57 @@ class _DetailScreenState extends State<DetailScreen> {
           );
         },
       ),
+    );
+  }
+}
+
+class _ProviderChoiceTile extends StatelessWidget {
+  const _ProviderChoiceTile({
+    required this.provider,
+    required this.health,
+    required this.onTap,
+  });
+
+  final VideoProvider provider;
+  final ProviderHealthResult? health;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final online = health?.isOnline == true;
+    final offline = health?.isOffline == true;
+    final color = online
+        ? AppTheme.success
+        : offline
+            ? AppTheme.error
+            : AppTheme.textSecondary;
+    final healthText = health == null
+        ? 'Status not available'
+        : online
+            ? 'Online${health!.requestTime > Duration.zero ? ' · ${health!.requestTime.inMilliseconds} ms' : ''}'
+            : offline
+                ? 'Offline'
+                : 'Untested';
+    final content = provider.content?.trim();
+    return ListTile(
+      leading: Icon(
+        online ? Icons.check_circle_outline : Icons.play_circle_outline,
+        color: color,
+      ),
+      title: Text(provider.displayName),
+      subtitle: Text(
+        content == null || content.isEmpty ? healthText : '$healthText · $content',
+        style: AppTheme.metaStyle,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+      trailing: health == null
+          ? null
+          : Text(
+              online ? 'Online' : offline ? 'Offline' : 'Untested',
+              style: TextStyle(color: color, fontWeight: FontWeight.w700),
+            ),
+      onTap: onTap,
     );
   }
 }

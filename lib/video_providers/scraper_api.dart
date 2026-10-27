@@ -52,6 +52,71 @@ class ScraperApi {
     }
   }
 
+  /// Returns ARKVideoScrapper's latest background provider-health snapshot.
+  /// This endpoint is read-only: it never launches a costly health run from
+  /// a viewer's device.
+  Future<ProviderHealthSnapshot> getProviderHealthStatus() async {
+    try {
+      final response = await _get(_endpoint('/providers/status'));
+      final body = _decodeObject(response.body);
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          body['success'] != true) {
+        throw ScraperApiException(_messageFrom(body, response.statusCode));
+      }
+      return ProviderHealthSnapshot.fromJson(body);
+    } finally {
+      if (_ownsClient) _client.close();
+    }
+  }
+
+  /// Requests a fresh, single-provider server check after an explicit user
+  /// tap in the status screen. The scraper coalesces duplicate checks and
+  /// applies its own short cooldown.
+  Future<ProviderHealthResult> checkProviderHealth(String providerId) async {
+    try {
+      final encodedId = Uri.encodeComponent(providerId);
+      final response = await _get(
+        _endpoint('/providers/$encodedId/health-check'),
+        timeout: const Duration(minutes: 2),
+      );
+      final body = _decodeObject(response.body);
+      final rawProvider = body['provider'];
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          body['success'] != true ||
+          rawProvider is! Map) {
+        throw ScraperApiException(_messageFrom(body, response.statusCode));
+      }
+      return ProviderHealthResult.fromJson(
+        Map<String, dynamic>.from(rawProvider),
+      );
+    } finally {
+      if (_ownsClient) _client.close();
+    }
+  }
+
+  /// Starts (or joins) the server's manually requested full provider scan.
+  /// This is intentionally used only by the user pressing Refresh; ordinary
+  /// screen loads read the lightweight cached snapshot above.
+  Future<ProviderHealthSnapshot> checkAllProviderHealth() async {
+    try {
+      final response = await _get(
+        _endpoint('/providers/health/check'),
+        timeout: const Duration(minutes: 5),
+      );
+      final body = _decodeObject(response.body);
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          body['success'] != true) {
+        throw ScraperApiException(_messageFrom(body, response.statusCode));
+      }
+      return ProviderHealthSnapshot.fromJson(body);
+    } finally {
+      if (_ownsClient) _client.close();
+    }
+  }
+
   Future<ProviderLoadResult> loadMovie({
     required String providerId,
     required int movieId,
@@ -193,4 +258,83 @@ class ScraperApiException implements Exception {
   final String message;
   @override
   String toString() => message;
+}
+
+class ProviderHealthSnapshot {
+  const ProviderHealthSnapshot({
+    required this.updatedAt,
+    required this.interval,
+    required this.total,
+    required this.online,
+    required this.offline,
+    required this.providers,
+  });
+
+  factory ProviderHealthSnapshot.fromJson(Map<String, dynamic> json) {
+    final summary = json['summary'] is Map
+        ? Map<String, dynamic>.from(json['summary'] as Map)
+        : const <String, dynamic>{};
+    final providers = (json['providers'] as List? ?? const [])
+        .whereType<Map>()
+        .map((item) => ProviderHealthResult.fromJson(
+            Map<String, dynamic>.from(item)))
+        .where((provider) => provider.id.isNotEmpty)
+        .toList(growable: false);
+    int number(Object? value, int fallback) =>
+        value is num ? value.toInt() : fallback;
+    return ProviderHealthSnapshot(
+      updatedAt: json['updatedAt'] is String
+          ? DateTime.tryParse(json['updatedAt'] as String)
+          : null,
+      interval: Duration(milliseconds: number(json['intervalMs'], 0)),
+      total: number(summary['total'], providers.length),
+      online: number(
+        summary['online'],
+        providers.where((provider) => provider.isOnline).length,
+      ),
+      offline: number(
+        summary['offline'],
+        providers.where((provider) => provider.isOffline).length,
+      ),
+      providers: providers,
+    );
+  }
+
+  final DateTime? updatedAt;
+  final Duration interval;
+  final int total;
+  final int online;
+  final int offline;
+  final List<ProviderHealthResult> providers;
+}
+
+class ProviderHealthResult {
+  const ProviderHealthResult({
+    required this.id,
+    required this.alias,
+    required this.status,
+    required this.requestTime,
+  });
+
+  factory ProviderHealthResult.fromJson(Map<String, dynamic> json) {
+    return ProviderHealthResult(
+      id: json['id']?.toString() ?? '',
+      alias: json['alias']?.toString() ?? '',
+      status: json['status']?.toString() ?? 'untested',
+      requestTime: Duration(
+        milliseconds: json['requestTimeMs'] is num
+            ? (json['requestTimeMs'] as num).toInt()
+            : 0,
+      ),
+    );
+  }
+
+  final String id;
+  final String alias;
+  final String status;
+  final Duration requestTime;
+
+  bool get isOnline => status == 'online';
+  bool get isOffline => status == 'offline';
+  String get displayName => alias.trim().isEmpty ? id : alias;
 }
