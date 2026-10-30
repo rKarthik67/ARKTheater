@@ -15,7 +15,7 @@ class LoadingIndicator extends StatelessWidget {
           const CircularProgressIndicator(color: AppTheme.accent),
           if (label != null) ...[
             const SizedBox(height: 12),
-            Text(label!, style: const TextStyle(color: AppTheme.textSecondary)),
+            Text(label!, style: TextStyle(color: AppTheme.textSecondaryOf(context))),
           ],
         ],
       ),

@@ -153,9 +153,9 @@ class _Chip extends StatelessWidget {
       onSelected: (_) => onTap(),
       showCheckmark: false,
       selectedColor: AppTheme.accent,
-      backgroundColor: AppTheme.surfaceVariant,
+      backgroundColor: AppTheme.surfaceVariantOf(context),
       labelStyle: TextStyle(
-        color: selected ? Colors.white : AppTheme.textPrimary,
+        color: selected ? Colors.white : AppTheme.textPrimaryOf(context),
         fontSize: 12,
         fontWeight: selected ? FontWeight.bold : FontWeight.normal,
       ),

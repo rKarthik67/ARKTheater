@@ -128,7 +128,7 @@ class _ProviderStatusScreenState extends State<ProviderStatusScreen> {
                       'Providers',
                       style: AppTheme.resolvedStyle(
                         context,
-                        AppTheme.sectionHeaderStyle,
+                        AppTheme.sectionHeaderStyle(context),
                         TextCategory.header,
                       ),
                     ),
@@ -163,9 +163,9 @@ class _OverviewCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceVariant,
+        color: AppTheme.surfaceVariantOf(context),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.border),
+        border: Border.all(color: AppTheme.borderOf(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -177,18 +177,18 @@ class _OverviewCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             '${snapshot.offline} offline${interval > 0 ? ' · checked every $interval min' : ''}',
-            style: AppTheme.metaStyle,
+            style: AppTheme.metaStyle(context),
           ),
           const SizedBox(height: 4),
           Text(
             runningFullCheck
                 ? 'Running a fresh check of all providers…'
                 : 'Tap a provider to check it now. Pull down to check all.',
-            style: AppTheme.metaStyle,
+            style: AppTheme.metaStyle(context),
           ),
           if (updated != null) ...[
             const SizedBox(height: 4),
-            Text('Last checked: ${MaterialLocalizations.of(context).formatMediumDate(updated)} · ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(updated))}', style: AppTheme.metaStyle),
+            Text('Last checked: ${MaterialLocalizations.of(context).formatMediumDate(updated)} · ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(updated))}', style: AppTheme.metaStyle(context)),
           ],
         ],
       ),
@@ -221,7 +221,7 @@ class _ProviderTile extends StatelessWidget {
             : 'Untested';
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
-      color: AppTheme.surface,
+      color: AppTheme.surfaceOf(context),
       child: ListTile(
         leading: Icon(
           provider.isOnline ? Icons.check_circle_outline : Icons.error_outline,
@@ -232,7 +232,7 @@ class _ProviderTile extends StatelessWidget {
           provider.requestTime > Duration.zero
               ? '${provider.requestTime.inMilliseconds} ms'
               : 'No completed check yet',
-          style: AppTheme.metaStyle,
+          style: AppTheme.metaStyle(context),
         ),
         trailing: checking
             ? const SizedBox(
@@ -258,14 +258,14 @@ class _MessageCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceVariant,
+        color: AppTheme.surfaceVariantOf(context),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
-          Icon(icon, color: AppTheme.textSecondary),
+          Icon(icon, color: AppTheme.textSecondaryOf(context)),
           const SizedBox(width: 12),
-          Expanded(child: Text(message, style: AppTheme.metaStyle)),
+          Expanded(child: Text(message, style: AppTheme.metaStyle(context))),
         ],
       ),
     );

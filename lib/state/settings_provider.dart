@@ -45,6 +45,8 @@ class SettingsProvider extends ChangeNotifier {
   static const _scraperBaseUrlKey = 'settings_scraper_base_url';
   static const _customScraperBackupUrlKey =
       'settings_custom_scraper_backup_url';
+  static const _torrentSourceUrlKey = 'settings_torrent_source_url';
+  static const _themeModeKey = 'settings_theme_mode';
   static const _scraperSourceVersionKey = 'settings_scraper_source_version';
   static const _scraperSourceVersion = 2;
 
@@ -64,6 +66,15 @@ class SettingsProvider extends ChangeNotifier {
   // toward a heavier frosted look if wanted.
   static const double minGlassOpacityScale = 0.0;
   static const double maxGlassOpacityScale = 4.0;
+
+  /// Settings > Appearance > Light/Dark. Dark is ARKTheater's original,
+  /// default look (see core/theme.dart's doc comment); Light is the
+  /// Watchly-style white theme - see AppTheme.lightBackground etc.
+  /// ThemeMode.system is intentionally not offered: the light palette is
+  /// a deliberate user opt-in, not something that should flip under
+  /// whatever the OS happens to be set to.
+  ThemeMode _themeMode = ThemeMode.dark;
+  ThemeMode get themeMode => _themeMode;
 
   /// `null` means "use the app's default metallic-gold accent"
   /// (AppTheme.accent) - see AppTheme.themeFor().
@@ -85,7 +96,8 @@ class SettingsProvider extends ChangeNotifier {
     for (final c in TextCategory.values) c: null,
   };
 
-  AppFontChoice? fontChoiceFor(TextCategory category) => findFontChoice(_categoryFontId[category]);
+  AppFontChoice? fontChoiceFor(TextCategory category) =>
+      findFontChoice(_categoryFontId[category]);
   Color? fontColorFor(TextCategory category) => _categoryFontColor[category];
 
   /// Turns off the app's scroll-in text animations (see
@@ -115,13 +127,16 @@ class SettingsProvider extends ChangeNotifier {
   Color? _scrollAnimationColor;
   Color? get scrollAnimationColor => _scrollAnimationColor;
 
-  EntranceAnimationStyle _entranceAnimationStyle = EntranceAnimationStyle.fadeLift;
+  EntranceAnimationStyle _entranceAnimationStyle =
+      EntranceAnimationStyle.fadeLift;
   EntranceAnimationStyle get entranceAnimationStyle => _entranceAnimationStyle;
 
   String _scraperBaseUrl = AppConfig.primaryScraperBaseUrl;
   String get scraperBaseUrl => _scraperBaseUrl;
   String? _customScraperBackupUrl;
   String? get customScraperBackupUrl => _customScraperBackupUrl;
+  String? _torrentSourceUrl;
+  String? get torrentSourceUrl => _torrentSourceUrl;
 
   bool _isLoaded = false;
   bool get isLoaded => _isLoaded;
@@ -135,8 +150,11 @@ class SettingsProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final stored = prefs.getDouble(_glassOpacityScaleKey);
       if (stored != null) {
-        _glassOpacityScale = stored.clamp(minGlassOpacityScale, maxGlassOpacityScale);
+        _glassOpacityScale =
+            stored.clamp(minGlassOpacityScale, maxGlassOpacityScale);
       }
+      final themeModeName = prefs.getString(_themeModeKey);
+      if (themeModeName == 'light') _themeMode = ThemeMode.light;
       final accentValue = prefs.getInt(_accentColorKey);
       if (accentValue != null) {
         _accentColor = Color(accentValue);
@@ -152,6 +170,10 @@ class SettingsProvider extends ChangeNotifier {
       final savedCustomBackup = prefs.getString(_customScraperBackupUrlKey);
       if (_isValidScraperUrl(savedCustomBackup)) {
         _customScraperBackupUrl = _normalizeScraperUrl(savedCustomBackup!);
+      }
+      final savedTorrentSource = prefs.getString(_torrentSourceUrlKey);
+      if (_isValidScraperUrl(savedTorrentSource)) {
+        _torrentSourceUrl = _normalizeScraperUrl(savedTorrentSource!);
       }
       final savedScraperUrl = prefs.getString(_scraperBaseUrlKey);
       final savedSourceVersion = prefs.getInt(_scraperSourceVersionKey) ?? 0;
@@ -178,7 +200,8 @@ class SettingsProvider extends ChangeNotifier {
         final fontId = prefs.getString('$_fontFamilyKeyPrefix${category.name}');
         if (fontId != null) _categoryFontId[category] = fontId;
         final colorValue = prefs.getInt('$_fontColorKeyPrefix${category.name}');
-        if (colorValue != null) _categoryFontColor[category] = Color(colorValue);
+        if (colorValue != null)
+          _categoryFontColor[category] = Color(colorValue);
       }
     } catch (_) {
       // Fall back to defaults if prefs are unavailable.
@@ -199,6 +222,18 @@ class SettingsProvider extends ChangeNotifier {
     } catch (_) {
       // Best-effort persistence - the in-memory value still applies this
       // session even if writing to disk fails.
+    }
+  }
+
+  Future<void> setThemeMode(ThemeMode mode) async {
+    if (mode == _themeMode) return;
+    _themeMode = mode;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_themeModeKey, mode == ThemeMode.light ? 'light' : 'dark');
+    } catch (_) {
+      // Best-effort persistence.
     }
   }
 
@@ -357,13 +392,48 @@ class SettingsProvider extends ChangeNotifier {
     }
   }
 
+  /// Configures a torrent resolver that follows the same read-only `/api/v2`
+  /// contract as the other sources. ARKTheater therefore receives normal
+  /// HTTPS/HLS links and does not embed a BitTorrent engine or catalogue.
+  Future<bool> setTorrentSourceUrl(String value) async {
+    if (!_isValidScraperUrl(value)) return false;
+    final next = _normalizeScraperUrl(value);
+    _torrentSourceUrl = next;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_torrentSourceUrlKey, next);
+    } catch (_) {
+      // The configured source remains usable for this session.
+    }
+    return true;
+  }
+
+  Future<void> removeTorrentSourceUrl() async {
+    final removed = _torrentSourceUrl;
+    _torrentSourceUrl = null;
+    if (_scraperBaseUrl == removed) {
+      _scraperBaseUrl = AppConfig.primaryScraperBaseUrl;
+      AppConfig.setScraperBaseUrl(_scraperBaseUrl);
+    }
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_torrentSourceUrlKey);
+      await prefs.setString(_scraperBaseUrlKey, _scraperBaseUrl);
+    } catch (_) {
+      // Best-effort persistence.
+    }
+  }
+
   bool _isAllowedScraperUrl(String? value) {
     if (!_isValidScraperUrl(value)) return false;
     final normalized = _normalizeScraperUrl(value!);
     return normalized == AppConfig.primaryScraperBaseUrl ||
         normalized == AppConfig.oracleScraperBaseUrl ||
         normalized == AppConfig.vercelScraperBaseUrl ||
-        normalized == _customScraperBackupUrl;
+        normalized == _customScraperBackupUrl ||
+        normalized == _torrentSourceUrl;
   }
 
   bool _isValidScraperUrl(String? value) {

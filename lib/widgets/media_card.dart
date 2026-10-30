@@ -58,16 +58,16 @@ class MediaCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(10),
                   child: posterUrl == null
                       ? Container(
-                          color: AppTheme.surfaceVariant,
-                          child: const Icon(Icons.movie_outlined, color: AppTheme.textSecondary),
+                          color: AppTheme.surfaceVariantOf(context),
+                          child: Icon(Icons.movie_outlined, color: AppTheme.textSecondaryOf(context)),
                         )
                       : CachedNetworkImage(
                           imageUrl: posterUrl,
                           fit: BoxFit.cover,
-                          placeholder: (_, __) => Container(color: AppTheme.surfaceVariant),
+                          placeholder: (_, __) => Container(color: AppTheme.surfaceVariantOf(context)),
                           errorWidget: (_, __, ___) => Container(
-                            color: AppTheme.surfaceVariant,
-                            child: const Icon(Icons.broken_image_outlined, color: AppTheme.textSecondary),
+                            color: AppTheme.surfaceVariantOf(context),
+                            child: Icon(Icons.broken_image_outlined, color: AppTheme.textSecondaryOf(context)),
                           ),
                         ),
                 ),
@@ -118,12 +118,12 @@ class MediaCard extends StatelessWidget {
               subtitle!,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: AppTheme.resolvedStyle(context, AppTheme.metaStyle, TextCategory.info),
+              style: AppTheme.resolvedStyle(context, AppTheme.metaStyle(context), TextCategory.info),
             )
           else if (item.year.isNotEmpty)
             Text(
               item.year,
-              style: AppTheme.resolvedStyle(context, AppTheme.metaStyle, TextCategory.info),
+              style: AppTheme.resolvedStyle(context, AppTheme.metaStyle(context), TextCategory.info),
             ),
         ],
       ),

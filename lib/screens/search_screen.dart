@@ -222,8 +222,8 @@ class _RecentSearchesViewState extends State<_RecentSearchesView> {
       builder: (context, snapshot) {
         final terms = snapshot.data ?? const [];
         if (terms.isEmpty) {
-          return const Center(
-            child: Text('Start typing to search', style: TextStyle(color: AppTheme.textSecondary)),
+          return Center(
+            child: Text('Start typing to search', style: TextStyle(color: AppTheme.textSecondaryOf(context))),
           );
         }
         return Column(
@@ -249,7 +249,7 @@ class _RecentSearchesViewState extends State<_RecentSearchesView> {
               child: ListView.builder(
                 itemCount: terms.length,
                 itemBuilder: (context, index) => ListTile(
-                  leading: const Icon(Icons.history, color: AppTheme.textSecondary),
+                  leading: Icon(Icons.history, color: AppTheme.textSecondaryOf(context)),
                   title: Text(terms[index]),
                   onTap: () => widget.onSearchAgain(terms[index]),
                 ),
@@ -301,9 +301,9 @@ class _RecentSearchesRowState extends State<_RecentSearchesRow> {
             children: [
               for (final term in terms) ...[
                 ActionChip(
-                  avatar: const Icon(Icons.history, size: 16, color: AppTheme.textSecondary),
+                  avatar: Icon(Icons.history, size: 16, color: AppTheme.textSecondaryOf(context)),
                   label: Text(term, style: const TextStyle(fontSize: 12)),
-                  backgroundColor: AppTheme.surfaceVariant,
+                  backgroundColor: AppTheme.surfaceVariantOf(context),
                   side: BorderSide.none,
                   onPressed: () => widget.onSearchAgain(term),
                 ),
@@ -333,15 +333,15 @@ class _DropdownChip<T> extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceVariant,
+        color: AppTheme.surfaceVariantOf(context),
         borderRadius: BorderRadius.circular(20),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<T>(
           value: value,
-          dropdownColor: AppTheme.surfaceVariant,
-          icon: const Icon(Icons.expand_more, size: 18, color: AppTheme.textSecondary),
-          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+          dropdownColor: AppTheme.surfaceVariantOf(context),
+          icon: Icon(Icons.expand_more, size: 18, color: AppTheme.textSecondaryOf(context)),
+          style: TextStyle(color: AppTheme.textPrimaryOf(context), fontSize: 12),
           items: items,
           // DropdownButton<T>.onChanged is `void Function(T?)?` - T is
           // already nullable everywhere this is used (int?/String?), but
@@ -410,7 +410,7 @@ class _FilterBar extends StatelessWidget {
 
 Widget _resultsGrid(BuildContext context, List<MediaItem> results, void Function(MediaItem) onSelect) {
   if (results.isEmpty) {
-    return const Center(child: Text('No results', style: TextStyle(color: AppTheme.textSecondary)));
+    return Center(child: Text('No results', style: TextStyle(color: AppTheme.textSecondaryOf(context))));
   }
   final columns = Responsive.gridColumns(context);
   return GridView.builder(
@@ -695,9 +695,9 @@ class _TVResultsState extends State<_TVResults> {
                   onSelected: (_) => widget.onSeasonFilterChanged(f),
                   showCheckmark: false,
                   selectedColor: AppTheme.accent,
-                  backgroundColor: AppTheme.surfaceVariant,
+                  backgroundColor: AppTheme.surfaceVariantOf(context),
                   labelStyle: TextStyle(
-                    color: f == widget.seasonFilter ? Colors.white : AppTheme.textPrimary,
+                    color: f == widget.seasonFilter ? Colors.white : AppTheme.textPrimaryOf(context),
                     fontSize: 11,
                   ),
                   side: BorderSide.none,
@@ -814,7 +814,7 @@ class _PeopleResultsState extends State<_PeopleResults> {
         if (snapshot.hasError) return ErrorView(message: 'Search failed.\n${snapshot.error}');
         final people = snapshot.data ?? const [];
         if (people.isEmpty) {
-          return const Center(child: Text('No results', style: TextStyle(color: AppTheme.textSecondary)));
+          return Center(child: Text('No results', style: TextStyle(color: AppTheme.textSecondaryOf(context))));
         }
         return ListView.builder(
           padding: EdgeInsets.fromLTRB(0, 8, 0, 8 + Responsive.bottomNavInset(context)),
@@ -825,10 +825,10 @@ class _PeopleResultsState extends State<_PeopleResults> {
             return ListTile(
               leading: CircleAvatar(
                 radius: 24,
-                backgroundColor: AppTheme.surfaceVariant,
+                backgroundColor: AppTheme.surfaceVariantOf(context),
                 backgroundImage: photo != null ? NetworkImage(photo) : null,
                 child: photo == null
-                    ? const Icon(Icons.person_outline, color: AppTheme.textSecondary)
+                    ? Icon(Icons.person_outline, color: AppTheme.textSecondaryOf(context))
                     : null,
               ),
               title: Text(person.name),

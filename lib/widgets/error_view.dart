@@ -20,7 +20,7 @@ class ErrorView extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppTheme.textSecondary),
+              style: TextStyle(color: AppTheme.textSecondaryOf(context)),
             ),
             if (onRetry != null) ...[
               const SizedBox(height: 16),

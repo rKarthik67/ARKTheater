@@ -61,7 +61,7 @@ class MediaRow extends StatelessWidget {
                 Expanded(
                   child: Text(
                     title,
-                    style: AppTheme.resolvedStyle(context, AppTheme.sectionHeaderStyle, TextCategory.header),
+                    style: AppTheme.resolvedStyle(context, AppTheme.sectionHeaderStyle(context), TextCategory.header),
                   ),
                 ),
                 if (onViewMore != null)

@@ -11,6 +11,7 @@ import '../core/theme.dart';
 import '../models/external_subtitle.dart';
 import '../services/external_subtitle_service.dart';
 import '../services/playback_position_service.dart';
+import '../services/torrent_stream_service.dart';
 import 'package:provider/provider.dart';
 
 import '../state/recently_watched_provider.dart';
@@ -72,11 +73,11 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
   void _onPositionSaved(bool finished) {
     if (!finished) return;
     unawaited(context.read<RecentlyWatchedProvider>().removeItem(
-      widget.mediaType,
-      widget.tmdbId,
-      season: widget.season,
-      episode: widget.episode,
-    ));
+          widget.mediaType,
+          widget.tmdbId,
+          season: widget.season,
+          episode: widget.episode,
+        ));
     // Subtitles downloaded for this specific episode/movie have nothing
     // left to be "already downloaded for" once it's finished - forget
     // them so they stop showing the highlight (a subtitle also used by a
@@ -100,6 +101,15 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
   /// the audio switcher, which has to open a genuinely different URL, so it
   /// stays null until the first source opens.
   RegularVideoLinks? _currentLink;
+
+  /// Whether the source playing is the local libtorrent HTTP stream
+  /// (see TorrentStreamManager.kt) rather than an ordinary provider URL -
+  /// used to show the live peers/speed HUD below and nothing else, so
+  /// ordinary scraper/embed playback is unaffected.
+  bool get _isTorrentSource => (_result.videoLinks ?? const [])
+      .any((link) => (link.url ?? '').startsWith('http://127.0.0.1:'));
+  StreamSubscription<TorrentStreamStatus>? _torrentStatusSub;
+  TorrentStreamStatus? _torrentStatus;
 
   bool _loading = true;
   bool _switchingProvider = false;
@@ -157,6 +167,11 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     WakelockPlus.enable();
     _loadSubtitleDownloadHistory();
     _initSubtitleStyleThenController();
+    if (_isTorrentSource) {
+      _torrentStatusSub = TorrentStreamService.statuses.listen((status) {
+        if (mounted) setState(() => _torrentStatus = status);
+      });
+    }
   }
 
   Future<void> _initSubtitleStyleThenController() async {
@@ -218,17 +233,20 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
   @override
   void dispose() {
     _freezeWatchdog?.cancel();
+    _torrentStatusSub?.cancel();
     WakelockPlus.disable();
     final videoValue = _controller?.videoPlayerController?.value;
     if (videoValue != null) {
-      unawaited(_playbackPosition.save(
-        mediaType: widget.mediaType,
-        tmdbId: widget.tmdbId,
-        season: widget.season,
-        episode: widget.episode,
-        position: videoValue.position,
-        duration: videoValue.duration ?? Duration.zero,
-      ).then(_onPositionSaved));
+      unawaited(_playbackPosition
+          .save(
+            mediaType: widget.mediaType,
+            tmdbId: widget.tmdbId,
+            season: widget.season,
+            episode: widget.episode,
+            position: videoValue.position,
+            duration: videoValue.duration ?? Duration.zero,
+          )
+          .then(_onPositionSaved));
     }
     _controller?.dispose(forceDispose: true);
     super.dispose();
@@ -239,12 +257,14 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     final hours = d.inHours;
     final minutes = d.inMinutes.remainder(60);
     final seconds = d.inSeconds.remainder(60);
-    final mm = hours > 0 ? minutes.toString().padLeft(2, '0') : minutes.toString();
+    final mm =
+        hours > 0 ? minutes.toString().padLeft(2, '0') : minutes.toString();
     final ss = seconds.toString().padLeft(2, '0');
     return hours > 0 ? '$hours:$mm:$ss' : '$mm:$ss';
   }
 
-  void _setupController({Duration? resumeAt, bool preserveActiveSubtitle = false}) {
+  void _setupController(
+      {Duration? resumeAt, bool preserveActiveSubtitle = false}) {
     final settings = context.read<SettingsProvider>();
     final playerAccent =
         settings.playerAccentColor ?? settings.accentColor ?? AppTheme.accent;
@@ -347,7 +367,8 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
       ),
     );
     _controller!.addEventsListener(_onPlayerEvent);
-    unawaited(_openCurrentResult(resumeAt: resumeAt, preserveActiveSubtitle: preserveActiveSubtitle));
+    unawaited(_openCurrentResult(
+        resumeAt: resumeAt, preserveActiveSubtitle: preserveActiveSubtitle));
   }
 
   BetterPlayerVideoFormat? _inferFormat(RegularVideoLinks link) {
@@ -359,7 +380,8 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     return null;
   }
 
-  Future<void> _openCurrentResult({Duration? resumeAt, bool preserveActiveSubtitle = false}) async {
+  Future<void> _openCurrentResult(
+      {Duration? resumeAt, bool preserveActiveSubtitle = false}) async {
     final links = _result.videoLinks ?? const [];
     if (links.isEmpty) {
       setState(() {
@@ -383,6 +405,9 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
         if (link.url != null) (link.quality ?? 'auto'): link.url!,
     };
 
+    // The torrent engine's local stream (see TorrentStreamManager.kt) is a
+    // plain http://127.0.0.1 range server, so it plays back through the
+    // ordinary network data source exactly like any other provider URL.
     final dataSource = BetterPlayerDataSource(
       BetterPlayerDataSourceType.network,
       primary.url!,
@@ -478,7 +503,8 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
           await _controller!.seekTo(target);
           if (fromStorage && mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Resumed from ${_formatDuration(target)}')),
+              SnackBar(
+                  content: Text('Resumed from ${_formatDuration(target)}')),
             );
           }
         }
@@ -518,14 +544,16 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
 
       // Saved every tick regardless of play/pause state, so pausing (or
       // the app going to the background) doesn't lose recent progress.
-      unawaited(_playbackPosition.save(
-        mediaType: widget.mediaType,
-        tmdbId: widget.tmdbId,
-        season: widget.season,
-        episode: widget.episode,
-        position: position,
-        duration: videoValue?.duration ?? Duration.zero,
-      ).then(_onPositionSaved));
+      unawaited(_playbackPosition
+          .save(
+            mediaType: widget.mediaType,
+            tmdbId: widget.tmdbId,
+            season: widget.season,
+            episode: widget.episode,
+            position: position,
+            duration: videoValue?.duration ?? Duration.zero,
+          )
+          .then(_onPositionSaved));
 
       if (!isPlaying) {
         // Paused/buffering on purpose - don't count this against the
@@ -572,7 +600,9 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
 
     if (!result.success || (result.videoLinks?.isEmpty ?? true)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${provider.displayName} has no playable source right now.')),
+        SnackBar(
+            content: Text(
+                '${provider.displayName} has no playable source right now.')),
       );
       return;
     }
@@ -599,39 +629,48 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
       isScrollControlled: true,
       builder: (sheetContext) => LiquidGlassSheet(
         child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-                child: Text('Switch provider', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-              ),
-              // Bounded + scrollable (matching the "Search subtitles" sheet's
-              // pattern below) so a long provider list scrolls within the
-              // sheet instead of pushing later entries off-screen entirely.
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: widget.providers.length,
-                  itemBuilder: (context, i) => ListTile(
-                    leading: Icon(
-                      i == _providerIndex ? Icons.radio_button_checked : Icons.radio_button_off,
-                      color: i == _providerIndex ? AppTheme.accent : Colors.white54,
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  child: Text('Switch provider',
+                      style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600)),
+                ),
+                // Bounded + scrollable (matching the "Search subtitles" sheet's
+                // pattern below) so a long provider list scrolls within the
+                // sheet instead of pushing later entries off-screen entirely.
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: widget.providers.length,
+                    itemBuilder: (context, i) => ListTile(
+                      leading: Icon(
+                        i == _providerIndex
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        color: i == _providerIndex
+                            ? AppTheme.accent
+                            : Colors.white54,
+                      ),
+                      title: Text(widget.providers[i].displayName,
+                          style: const TextStyle(color: Colors.white)),
+                      onTap: () {
+                        Navigator.pop(sheetContext);
+                        _switchProvider(i);
+                      },
                     ),
-                    title: Text(widget.providers[i].displayName, style: const TextStyle(color: Colors.white)),
-                    onTap: () {
-                      Navigator.pop(sheetContext);
-                      _switchProvider(i);
-                    },
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
         ),
       ),
     );
@@ -666,7 +705,11 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
             shrinkWrap: true,
             children: [
               const ListTile(
-                title: Text('Audio & language', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+                title: Text('Audio & language',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600)),
               ),
               for (final label in labels)
                 ListTile(
@@ -674,17 +717,21 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                     current != null && audioLabelForLink(current) == label
                         ? Icons.radio_button_checked
                         : Icons.radio_button_off,
-                    color: current != null && audioLabelForLink(current) == label
-                        ? AppTheme.accent
-                        : Colors.white54,
+                    color:
+                        current != null && audioLabelForLink(current) == label
+                            ? AppTheme.accent
+                            : Colors.white54,
                   ),
-                  title: Text(label, style: const TextStyle(color: Colors.white)),
+                  title:
+                      Text(label, style: const TextStyle(color: Colors.white)),
                   onTap: () {
                     final sameQuality = links.where((link) =>
-                        audioLabelForLink(link) == label && link.quality == current?.quality);
+                        audioLabelForLink(link) == label &&
+                        link.quality == current?.quality);
                     final next = sameQuality.isNotEmpty
                         ? sameQuality.first
-                        : links.firstWhere((link) => audioLabelForLink(link) == label);
+                        : links.firstWhere(
+                            (link) => audioLabelForLink(link) == label);
                     Navigator.pop(sheetContext);
                     _switchQuality(next);
                   },
@@ -717,9 +764,11 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
   // +/- 0.25s per tap. Only meaningful once a subtitle picked from the
   // "Search subtitles" list has been fetched (see _applyExternalSubtitle) -
   // there's nothing to shift before that.
-  void _adjustSubtitleDelay(double deltaSeconds, void Function(void Function()) setSheetState) {
+  void _adjustSubtitleDelay(
+      double deltaSeconds, void Function(void Function()) setSheetState) {
     if (_activeSubtitleRawContent == null) return;
-    _subtitleDelaySeconds = (_subtitleDelaySeconds + deltaSeconds).clamp(-30.0, 30.0);
+    _subtitleDelaySeconds =
+        (_subtitleDelaySeconds + deltaSeconds).clamp(-30.0, 30.0);
     _reapplySubtitleWithOffset();
     setSheetState(() {});
   }
@@ -735,12 +784,12 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     _activeSubtitleRawContent = null;
     _activeSubtitleName = sub.displayName;
     unawaited(_subtitleDownloadHistory.markDownloaded(
-                                mediaType: widget.mediaType,
-                                tmdbId: widget.tmdbId,
-                                season: widget.season,
-                                episode: widget.episode,
-                                subtitleId: sub.id,
-                              ));
+      mediaType: widget.mediaType,
+      tmdbId: widget.tmdbId,
+      season: widget.season,
+      episode: widget.episode,
+      subtitleId: sub.id,
+    ));
     if (mounted) {
       setState(() {
         _downloadedSubtitleIds = {..._downloadedSubtitleIds, sub.id};
@@ -748,7 +797,9 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
       });
     }
     try {
-      final response = await http.get(Uri.parse(sub.url)).timeout(const Duration(seconds: 15));
+      final response = await http
+          .get(Uri.parse(sub.url))
+          .timeout(const Duration(seconds: 15));
       if (response.statusCode == 200) {
         _activeSubtitleRawContent = response.body;
         _reapplySubtitleWithOffset();
@@ -766,7 +817,8 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     );
   }
 
-  Future<void> _fetchExternalSubtitles(void Function(void Function()) setSheetState) async {
+  Future<void> _fetchExternalSubtitles(
+      void Function(void Function()) setSheetState) async {
     try {
       final subs = widget.mediaType == MediaType.movie
           ? await ExternalSubtitleService.fetchMovieSubtitles(widget.tmdbId)
@@ -881,8 +933,8 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                                     _activeSubtitleName = null;
                                     _controller?.setupSubtitleSource(
                                       BetterPlayerSubtitlesSource(
-                                        type:
-                                            BetterPlayerSubtitlesSourceType.network,
+                                        type: BetterPlayerSubtitlesSourceType
+                                            .network,
                                         urls: [url],
                                         name: subtitle.language ?? 'Unknown',
                                         headers: subtitle.headers,
@@ -934,123 +986,155 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
                   child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Search subtitles', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
-                  if (_activeSubtitleRawContent != null) ...[
-                    const SizedBox(height: 12),
-                    // Only shown once a subtitle fetched from this sheet is
-                    // active - lets the user nudge it into sync without
-                    // re-searching, the real fix for "timing doesn't quite
-                    // match the speech" (usually a fixed offset from a
-                    // slightly different release/cut, not a bad file).
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Subtitle sync', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Search subtitles',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600)),
+                      if (_activeSubtitleRawContent != null) ...[
+                        const SizedBox(height: 12),
+                        // Only shown once a subtitle fetched from this sheet is
+                        // active - lets the user nudge it into sync without
+                        // re-searching, the real fix for "timing doesn't quite
+                        // match the speech" (usually a fixed offset from a
+                        // slightly different release/cut, not a bad file).
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            IconButton(
-                              icon: const Icon(Icons.remove_circle_outline, color: Colors.white70, size: 20),
-                              tooltip: 'Subtitles earlier',
-                              onPressed: () => _adjustSubtitleDelay(-0.25, setSheetState),
-                            ),
-                            SizedBox(
-                              width: 56,
-                              child: Text(
-                                '${_subtitleDelaySeconds >= 0 ? '+' : ''}${_subtitleDelaySeconds.toStringAsFixed(2)}s',
-                                textAlign: TextAlign.center,
-                                style: const TextStyle(color: Colors.white, fontSize: 13),
-                              ),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.add_circle_outline, color: Colors.white70, size: 20),
-                              tooltip: 'Subtitles later',
-                              onPressed: () => _adjustSubtitleDelay(0.25, setSheetState),
+                            const Text('Subtitle sync',
+                                style: TextStyle(
+                                    color: Colors.white70, fontSize: 13)),
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.remove_circle_outline,
+                                      color: Colors.white70, size: 20),
+                                  tooltip: 'Subtitles earlier',
+                                  onPressed: () => _adjustSubtitleDelay(
+                                      -0.25, setSheetState),
+                                ),
+                                SizedBox(
+                                  width: 56,
+                                  child: Text(
+                                    '${_subtitleDelaySeconds >= 0 ? '+' : ''}${_subtitleDelaySeconds.toStringAsFixed(2)}s',
+                                    textAlign: TextAlign.center,
+                                    style: const TextStyle(
+                                        color: Colors.white, fontSize: 13),
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.add_circle_outline,
+                                      color: Colors.white70, size: 20),
+                                  tooltip: 'Subtitles later',
+                                  onPressed: () =>
+                                      _adjustSubtitleDelay(0.25, setSheetState),
+                                ),
+                              ],
                             ),
                           ],
                         ),
                       ],
-                    ),
-                  ],
-                  const SizedBox(height: 8),
-                  if (_loadingExternalSubtitles)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 20),
-                      child: Center(child: CircularProgressIndicator(color: AppTheme.accent)),
-                    )
-                  else if (_externalSubtitlesError != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      child: Text(
-                        'Subtitle search failed:\n$_externalSubtitlesError',
-                        style: const TextStyle(color: Colors.orangeAccent, fontSize: 13),
-                      ),
-                    )
-                  else if (_externalSubtitles.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 12),
-                      child: Text('No external subtitles found for this title.', style: TextStyle(color: Colors.white54)),
-                    )
-                  else
-                    Expanded(
-                      child: ListView.builder(
-                        // This is the only scrollable in the sheet. Keeping
-                        // it expanded gives touch drags to the list instead
-                        // of the modal sheet, including on iPad.
-                        itemCount: _externalSubtitles.length,
-                        itemBuilder: (context, index) {
-                          final sub = _externalSubtitles[index];
-                          // Previously-picked subtitles get a tinted
-                          // background so it's obvious at a glance which
-                          // ones have already been tried for this or any
-                          // other title. The single most recent pick gets
-                          // its own distinct light-yellow highlight instead,
-                          // taking priority over the general tint.
-                          final isLastDownloaded =
-                              _lastDownloadedSubtitleId != null && sub.id == _lastDownloadedSubtitleId;
-                          final isDownloaded = _downloadedSubtitleIds.contains(sub.id);
-                          final highlighted = isLastDownloaded || isDownloaded;
-                          return ListTile(
-                            tileColor: isLastDownloaded
-                                ? Colors.yellow.withOpacity(0.22)
-                                : isDownloaded
-                                    ? AppTheme.accent.withOpacity(0.18)
+                      const SizedBox(height: 8),
+                      if (_loadingExternalSubtitles)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                              child: CircularProgressIndicator(
+                                  color: AppTheme.accent)),
+                        )
+                      else if (_externalSubtitlesError != null)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                            'Subtitle search failed:\n$_externalSubtitlesError',
+                            style: const TextStyle(
+                                color: Colors.orangeAccent, fontSize: 13),
+                          ),
+                        )
+                      else if (_externalSubtitles.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Text(
+                              'No external subtitles found for this title.',
+                              style: TextStyle(color: Colors.white54)),
+                        )
+                      else
+                        Expanded(
+                          child: ListView.builder(
+                            // This is the only scrollable in the sheet. Keeping
+                            // it expanded gives touch drags to the list instead
+                            // of the modal sheet, including on iPad.
+                            itemCount: _externalSubtitles.length,
+                            itemBuilder: (context, index) {
+                              final sub = _externalSubtitles[index];
+                              // Previously-picked subtitles get a tinted
+                              // background so it's obvious at a glance which
+                              // ones have already been tried for this or any
+                              // other title. The single most recent pick gets
+                              // its own distinct light-yellow highlight instead,
+                              // taking priority over the general tint.
+                              final isLastDownloaded =
+                                  _lastDownloadedSubtitleId != null &&
+                                      sub.id == _lastDownloadedSubtitleId;
+                              final isDownloaded =
+                                  _downloadedSubtitleIds.contains(sub.id);
+                              final highlighted =
+                                  isLastDownloaded || isDownloaded;
+                              return ListTile(
+                                tileColor: isLastDownloaded
+                                    ? Colors.yellow.withOpacity(0.22)
+                                    : isDownloaded
+                                        ? AppTheme.accent.withOpacity(0.18)
+                                        : null,
+                                shape: highlighted
+                                    ? RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8))
                                     : null,
-                            shape: highlighted
-                                ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
-                                : null,
-                            leading: const Icon(Icons.closed_caption_outlined, color: Colors.white70),
-                            title: Text(sub.displayName, style: const TextStyle(color: Colors.white)),
-                            subtitle: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  sub.downloadCount > 0 ? '${sub.source} - ${sub.downloadCount} downloads' : sub.source,
-                                  style: const TextStyle(color: Colors.white38, fontSize: 11),
+                                leading: const Icon(
+                                    Icons.closed_caption_outlined,
+                                    color: Colors.white70),
+                                title: Text(sub.displayName,
+                                    style:
+                                        const TextStyle(color: Colors.white)),
+                                subtitle: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      sub.downloadCount > 0
+                                          ? '${sub.source} - ${sub.downloadCount} downloads'
+                                          : sub.source,
+                                      style: const TextStyle(
+                                          color: Colors.white38, fontSize: 11),
+                                    ),
+                                    if (isLastDownloaded)
+                                      const Text(
+                                        'Last downloaded',
+                                        style: TextStyle(
+                                            color: Colors.yellow,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold),
+                                      ),
+                                  ],
                                 ),
-                                if (isLastDownloaded)
-                                  const Text(
-                                    'Last downloaded',
-                                    style: TextStyle(color: Colors.yellow, fontSize: 11, fontWeight: FontWeight.bold),
-                                  ),
-                              ],
-                            ),
-                            trailing: isLastDownloaded
-                                ? const Icon(Icons.history, color: Colors.yellow, size: 18)
-                                : isDownloaded
-                                    ? const Icon(Icons.check_circle, color: AppTheme.accent, size: 18)
-                                    : null,
-                            onTap: () {
-                              unawaited(_applyExternalSubtitle(sub));
-                              Navigator.pop(sheetContext);
+                                trailing: isLastDownloaded
+                                    ? const Icon(Icons.history,
+                                        color: Colors.yellow, size: 18)
+                                    : isDownloaded
+                                        ? const Icon(Icons.check_circle,
+                                            color: AppTheme.accent, size: 18)
+                                        : null,
+                                onTap: () {
+                                  unawaited(_applyExternalSubtitle(sub));
+                                  Navigator.pop(sheetContext);
+                                },
+                              );
                             },
-                          );
-                        },
-                      ),
-                    ),
-                ],
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -1112,7 +1196,8 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                 Positioned(
                   top: 8,
                   left: 8,
-                  child: _CircleIconButton(icon: Icons.arrow_back, onTap: _handleBack),
+                  child: _CircleIconButton(
+                      icon: Icons.arrow_back, onTap: _handleBack),
                 ),
               ],
             ),
@@ -1129,61 +1214,88 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
       child: Scaffold(
         backgroundColor: Colors.black,
         body: Stack(
-        fit: StackFit.expand,
-        children: [
-          if (_controller != null) BetterPlayer(controller: _controller!),
-          Positioned(
-            top: 8,
-            left: 8,
-            child: SafeArea(
-              child: _CircleIconButton(icon: Icons.arrow_back, onTap: _handleBack),
-            ),
-          ),
-          if (_loading || _switchingProvider)
-            const Center(child: CircularProgressIndicator(color: AppTheme.accent)),
-          if (_showFrozenHint && !_loading)
+          fit: StackFit.expand,
+          children: [
+            if (_controller != null) BetterPlayer(controller: _controller!),
             Positioned(
-              left: 24,
-              right: 24,
-              bottom: 100,
-              child: LiquidGlass(
-                borderRadius: BorderRadius.circular(16),
-                opacity: 0.72,
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      "This source seems stuck - it may be down.",
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: Colors.white70),
-                    ),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      alignment: WrapAlignment.center,
+              top: 8,
+              left: 8,
+              child: SafeArea(
+                child: _CircleIconButton(
+                    icon: Icons.arrow_back, onTap: _handleBack),
+              ),
+            ),
+            if (_torrentStatus != null)
+              Positioned(
+                top: 8,
+                right: 8,
+                child: SafeArea(
+                  child: LiquidGlass(
+                    borderRadius: BorderRadius.circular(999),
+                    opacity: 0.55,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (widget.providers.length > 1)
-                          ElevatedButton(
-                            onPressed: _showProviderSwitcher,
-                            child: const Text('Try another source'),
-                          ),
-                        OutlinedButton(
-                          onPressed: _openWebViewFallback,
-                          child: const Text('Watch via embedded player'),
+                        const Icon(Icons.hub_outlined,
+                            size: 14, color: Colors.white70),
+                        const SizedBox(width: 6),
+                        Text(
+                          _torrentStatus!.label,
+                          style: const TextStyle(
+                              color: Colors.white70, fontSize: 11),
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-        ],
+            if (_loading || _switchingProvider)
+              const Center(
+                  child: CircularProgressIndicator(color: AppTheme.accent)),
+            if (_showFrozenHint && !_loading)
+              Positioned(
+                left: 24,
+                right: 24,
+                bottom: 100,
+                child: LiquidGlass(
+                  borderRadius: BorderRadius.circular(16),
+                  opacity: 0.72,
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        "This source seems stuck - it may be down.",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.white70),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        alignment: WrapAlignment.center,
+                        children: [
+                          if (widget.providers.length > 1)
+                            ElevatedButton(
+                              onPressed: _showProviderSwitcher,
+                              child: const Text('Try another source'),
+                            ),
+                          OutlinedButton(
+                            onPressed: _openWebViewFallback,
+                            child: const Text('Watch via embedded player'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
   }
-
 }
 
 class _CircleIconButton extends StatelessWidget {
@@ -1230,15 +1342,21 @@ class _PlaybackErrorView extends StatelessWidget {
           children: [
             const Icon(Icons.error_outline, color: Colors.white54, size: 40),
             const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+            Text(message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.white70)),
             const SizedBox(height: 16),
             Wrap(
               spacing: 8,
               alignment: WrapAlignment.center,
               children: [
                 if (hasOtherProviders)
-                  ElevatedButton(onPressed: onTryAnotherSource, child: const Text('Try another source')),
-                OutlinedButton(onPressed: onWatchEmbedded, child: const Text('Watch via embedded player')),
+                  ElevatedButton(
+                      onPressed: onTryAnotherSource,
+                      child: const Text('Try another source')),
+                OutlinedButton(
+                    onPressed: onWatchEmbedded,
+                    child: const Text('Watch via embedded player')),
               ],
             ),
           ],

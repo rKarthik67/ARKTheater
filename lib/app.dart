@@ -22,16 +22,23 @@ class ArkTheaterApp extends StatelessWidget {
     // accent color from Settings > App Theme - see AppTheme.themeFor().
     return Consumer<SettingsProvider>(
       builder: (context, settings, child) {
-        final theme = AppTheme.themeFor(
-          accentColor: settings.accentColor ?? AppTheme.accent,
+        final accentColor = settings.accentColor ?? AppTheme.accent;
+        final darkTheme = AppTheme.themeFor(
+          accentColor: accentColor,
           settings: settings,
+          brightness: Brightness.dark,
+        );
+        final lightTheme = AppTheme.themeFor(
+          accentColor: accentColor,
+          settings: settings,
+          brightness: Brightness.light,
         );
         return MaterialApp(
           title: 'ARKTheater',
           debugShowCheckedModeBanner: false,
-          theme: theme,
-          darkTheme: theme,
-          themeMode: ThemeMode.dark,
+          theme: lightTheme,
+          darkTheme: darkTheme,
+          themeMode: settings.themeMode,
           // Settings > Appearance > Text Size, applied once here so every
           // screen picks it up. This deliberately replaces the OS-level
           // font scale rather than multiplying with it: the in-app slider

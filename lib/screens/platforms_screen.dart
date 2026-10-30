@@ -109,9 +109,9 @@ class _PlatformsScreenState extends State<PlatformsScreen> {
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: region,
-                    dropdownColor: AppTheme.surfaceVariant,
-                    icon: const Icon(Icons.expand_more, color: AppTheme.textSecondary),
-                    style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                    dropdownColor: AppTheme.surfaceVariantOf(context),
+                    icon: Icon(Icons.expand_more, color: AppTheme.textSecondaryOf(context)),
+                    style: TextStyle(color: AppTheme.textPrimaryOf(context), fontSize: 14),
                     items: [
                       for (final (code, label) in kWatchRegions)
                         DropdownMenuItem(value: code, child: Text('$label ($code)')),
@@ -131,7 +131,7 @@ class _PlatformsScreenState extends State<PlatformsScreen> {
             indicatorColor: AppTheme.resolvedAccent(context),
             indicatorWeight: 3,
             labelColor: AppTheme.resolvedAccent(context),
-            unselectedLabelColor: AppTheme.textSecondary,
+            unselectedLabelColor: AppTheme.textSecondaryOf(context),
             tabs: [
               Tab(text: 'OTT (${kOttPlatforms.length})', icon: const Icon(Icons.live_tv_outlined, size: 20)),
               Tab(

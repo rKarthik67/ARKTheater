@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/config.dart';
@@ -8,6 +11,7 @@ import '../core/theme.dart';
 import '../models/media_detail.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
+import '../services/torrent_stream_service.dart';
 import '../state/recently_watched_provider.dart';
 import '../state/watchlist_provider.dart';
 import '../video_providers/names.dart';
@@ -19,7 +23,9 @@ import '../widgets/error_view.dart';
 import '../widgets/fade_in_on_scroll.dart';
 import '../widgets/loading_indicator.dart';
 import '../widgets/media_row.dart';
+import 'episode_detail_screen.dart';
 import 'person_detail_screen.dart';
+import 'torrent_sources_page.dart';
 import 'player_screen.dart';
 import 'webview_player_screen.dart';
 
@@ -127,7 +133,8 @@ class _DetailScreenState extends State<DetailScreen> {
 
   Future<List<VideoProvider>> _loadProviders() async {
     try {
-      final providers = await ScraperApi(AppConfig.scraperBaseUrl).getProviders();
+      final providers =
+          await ScraperApi(AppConfig.scraperBaseUrl).getProviders();
       _providers = providers;
       return providers;
     } catch (_) {
@@ -147,8 +154,8 @@ class _DetailScreenState extends State<DetailScreen> {
     List<VideoProvider> providers,
   ) async {
     try {
-      final health = await ScraperApi(AppConfig.scraperBaseUrl)
-          .getProviderHealthStatus();
+      final health =
+          await ScraperApi(AppConfig.scraperBaseUrl).getProviderHealthStatus();
       final statusById = {
         for (final provider in health.providers) provider.id: provider,
       };
@@ -182,11 +189,12 @@ class _DetailScreenState extends State<DetailScreen> {
   }) async {
     if (_resolving) return;
 
-    final providers = _providers ?? await (_providersFuture ??= _loadProviders());
+    final providers =
+        _providers ?? await (_providersFuture ??= _loadProviders());
     if (!mounted) return;
 
     final choice = chooseProvider
-        ? await _showProviderPicker(providers)
+        ? await _showProviderPicker(providers, season: season, episode: episode)
         : const _StreamChoice.scraper(-1);
     if (choice == null || !mounted) return;
 
@@ -228,7 +236,8 @@ class _DetailScreenState extends State<DetailScreen> {
           load: load,
           onResult: (index, provider, result) {
             if (!mounted) return;
-            setState(() => _resolvingStatus = 'Trying ${provider.displayName}...');
+            setState(
+                () => _resolvingStatus = 'Trying ${provider.displayName}...');
           },
         );
       } else {
@@ -249,10 +258,12 @@ class _DetailScreenState extends State<DetailScreen> {
       if (selection == null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('No playable source found for this title yet. Try again shortly.'),
+            content: const Text(
+                'No playable source found for this title yet. Try again shortly.'),
             action: SnackBarAction(
               label: 'Watch instead',
-              onPressed: () => _openWebViewFallback(season: season, episode: episode),
+              onPressed: () =>
+                  _openWebViewFallback(season: season, episode: episode),
             ),
           ),
         );
@@ -269,13 +280,18 @@ class _DetailScreenState extends State<DetailScreen> {
             )
           : autoSelectedProvider;
 
-      await context.read<WatchlistProvider>().markWatched(widget.item.type, widget.item.id);
-      await context.read<RecentlyWatchedProvider>().record(item: widget.item, season: season, episode: episode);
+      await context
+          .read<WatchlistProvider>()
+          .markWatched(widget.item.type, widget.item.id);
+      await context
+          .read<RecentlyWatchedProvider>()
+          .record(item: widget.item, season: season, episode: episode);
 
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => PlayerScreen(
-            title: widget.item.title + (season != null ? ' - S${season}E$episode' : ''),
+            title: widget.item.title +
+                (season != null ? ' - S${season}E$episode' : ''),
             mediaType: widget.item.type,
             tmdbId: widget.item.id,
             season: season,
@@ -296,15 +312,148 @@ class _DetailScreenState extends State<DetailScreen> {
     }
   }
 
-  Future<_StreamChoice?> _showProviderPicker(List<VideoProvider> providers) {
+  Future<void> _playTorrent({
+    required String magnet,
+    int? fileIndex,
+    int? season,
+    int? episode,
+    bool useVlc = false,
+  }) async {
+    StreamSubscription<TorrentStreamStatus>? statusSubscription;
+    setState(() {
+      _resolving = true;
+      _resolvingStatus = 'Connecting to torrent peers...';
+    });
+    try {
+      statusSubscription = TorrentStreamService.statuses.listen((status) {
+        if (mounted) setState(() => _resolvingStatus = status.label);
+      });
+      final torrent =
+          await TorrentStreamService.startMagnet(magnet, fileIndex: fileIndex);
+      if (!mounted) return;
+      // Resolution is done - stop updating the detail screen's spinner text
+      // now so MobilePlayerScreen's own subscription (started once the
+      // player opens) is the only listener going forward.
+      await statusSubscription.cancel();
+      statusSubscription = null;
+      if (useVlc) {
+        await TorrentStreamService.playInExternalVlc(
+          url: torrent.fileUri,
+          title: widget.item.title +
+              (season != null ? ' - S${season}E$episode' : ''),
+        );
+        await context
+            .read<WatchlistProvider>()
+            .markWatched(widget.item.type, widget.item.id);
+        await context.read<RecentlyWatchedProvider>().record(
+              item: widget.item,
+              season: season,
+              episode: episode,
+            );
+        return;
+      }
+      final providers = const [
+        VideoProvider(
+          fullName: 'Torrent source',
+          codeName: 'local:torrent',
+          alias: 'Torrent source',
+        ),
+      ];
+      final result = ProviderLoadResult(
+        success: true,
+        videoLinks: [
+          RegularVideoLinks(
+            url: torrent.fileUri,
+            quality: 'Torrent',
+            server: 'Torrent source',
+          ),
+        ],
+      );
+      await context
+          .read<WatchlistProvider>()
+          .markWatched(widget.item.type, widget.item.id);
+      await context.read<RecentlyWatchedProvider>().record(
+            item: widget.item,
+            season: season,
+            episode: episode,
+          );
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PlayerScreen(
+            title: widget.item.title +
+                (season != null ? ' - S${season}E$episode' : ''),
+            mediaType: widget.item.type,
+            tmdbId: widget.item.id,
+            season: season,
+            episode: episode,
+            providers: providers,
+            initialProviderIndex: 0,
+            initialResult: result,
+          ),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not start torrent source: $error')),
+      );
+    } finally {
+      await statusSubscription?.cancel();
+      if (mounted) setState(() => _resolving = false);
+    }
+  }
+
+  void _openTorrentPage({int? season, int? episode}) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => TorrentSourcesPage(
+        title: widget.item.title,
+        mediaType: widget.item.type,
+        tmdbId: widget.item.id,
+        season: season,
+        episode: episode,
+        onPlay: (magnet, fileIndex, {useVlc = false}) => _playTorrent(
+            magnet: magnet,
+            fileIndex: fileIndex,
+            season: season,
+            episode: episode,
+            useVlc: useVlc),
+      ),
+    ));
+  }
+
+  void _openEpisodePage(EpisodeSummary episode) {
+    Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => EpisodeDetailScreen(
+        item: widget.item,
+        season: _selectedSeason,
+        episode: episode,
+        onScraper: () {
+          Navigator.of(context).pop();
+          _play(season: _selectedSeason, episode: episode.episodeNumber);
+        },
+        onEmbed: () {
+          Navigator.of(context).pop();
+          _openWebViewEmbed(0,
+              season: _selectedSeason, episode: episode.episodeNumber);
+        },
+      ),
+    ));
+  }
+
+  Future<_StreamChoice?> _showProviderPicker(
+    List<VideoProvider> providers, {
+    int? season,
+    int? episode,
+  }) {
     // Fetch once for this picker opening. This is the same server-side
     // snapshot Auto consults immediately after the user selects it.
-    final healthFuture = ScraperApi(AppConfig.scraperBaseUrl)
-        .getProviderHealthStatus();
+    final healthFuture =
+        ScraperApi(AppConfig.scraperBaseUrl).getProviderHealthStatus();
     return showModalBottomSheet<_StreamChoice>(
       context: context,
       showDragHandle: true,
-      backgroundColor: AppTheme.surface,
+      backgroundColor: AppTheme.surfaceOf(context),
       builder: (sheetContext) => SafeArea(
         child: SizedBox(
           height: MediaQuery.sizeOf(sheetContext).height * .62,
@@ -312,15 +461,17 @@ class _DetailScreenState extends State<DetailScreen> {
             future: healthFuture,
             builder: (context, healthSnapshot) {
               final healthById = {
-                for (final provider in healthSnapshot.data?.providers ?? const <ProviderHealthResult>[])
+                for (final provider in healthSnapshot.data?.providers ??
+                    const <ProviderHealthResult>[])
                   provider.id: provider,
               };
               return DefaultTabController(
                 length: 2,
                 child: Column(
                   children: [
-                    const ListTile(
-                      title: Text('Choose a stream source', style: AppTheme.sectionHeaderStyle),
+                    ListTile(
+                      title: Text('Choose a stream source',
+                          style: AppTheme.sectionHeaderStyle(context)),
                     ),
                     const TabBar(
                       tabs: [
@@ -333,64 +484,83 @@ class _DetailScreenState extends State<DetailScreen> {
                         children: [
                           ListView(
                             children: [
-                              if (healthSnapshot.connectionState == ConnectionState.waiting)
+                              if (healthSnapshot.connectionState ==
+                                  ConnectionState.waiting)
                                 const ListTile(
                                   leading: SizedBox(
                                     width: 20,
                                     height: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2),
                                   ),
                                   title: Text('Checking provider status…'),
                                 )
                               else if (healthSnapshot.hasError)
-                                const ListTile(
-                                  leading: Icon(Icons.cloud_off_outlined, color: AppTheme.warning),
-                                  title: Text('Provider status unavailable'),
-                                  subtitle: Text('Auto will still test sources directly.', style: AppTheme.metaStyle),
+                                ListTile(
+                                  leading: const Icon(Icons.cloud_off_outlined,
+                                      color: AppTheme.warning),
+                                  title: const Text('Provider status unavailable'),
+                                  subtitle: Text(
+                                      'Auto will still test sources directly.',
+                                      style: AppTheme.metaStyle(context)),
                                 ),
                               if (providers.isNotEmpty) ...[
                                 ListTile(
-                                  leading: const Icon(Icons.auto_awesome, color: AppTheme.accent),
+                                  leading: const Icon(Icons.auto_awesome,
+                                      color: AppTheme.accent),
                                   title: const Text('Auto'),
                                   subtitle: Text(
                                     healthSnapshot.data == null
                                         ? 'Tests sources directly to find a playable one'
                                         : '${healthSnapshot.data!.online}/${healthSnapshot.data!.total} providers online · checks this title next',
-                                    style: AppTheme.metaStyle,
+                                    style: AppTheme.metaStyle(context),
                                   ),
                                   onTap: () => Navigator.of(sheetContext)
                                       .pop(const _StreamChoice.scraper(-1)),
                                 ),
-                                const Divider(height: 1, color: AppTheme.border),
+                                Divider(
+                                    height: 1, color: AppTheme.borderOf(context)),
                                 for (var index = 0;
                                     index < providers.length;
                                     index++)
                                   _ProviderChoiceTile(
                                     provider: providers[index],
-                                    health: healthById[providers[index].apiId ?? ''],
+                                    health: healthById[
+                                        providers[index].apiId ?? ''],
                                     onTap: () => Navigator.of(sheetContext)
                                         .pop(_StreamChoice.scraper(index)),
                                   ),
                               ] else
-                                const ListTile(
-                                  leading: Icon(Icons.cloud_off_outlined, color: AppTheme.textSecondary),
-                                  title: Text('No scraper streams available'),
-                                  subtitle: Text('Check the scraper connection, or choose an embed.', style: AppTheme.metaStyle),
+                                ListTile(
+                                  leading: Icon(Icons.cloud_off_outlined,
+                                      color: AppTheme.textSecondaryOf(context)),
+                                  title: const Text('No scraper streams available'),
+                                  subtitle: Text(
+                                      'Check the scraper connection, or choose an embed.',
+                                      style: AppTheme.metaStyle(context)),
                                 ),
                             ],
                           ),
                           ListView(
                             children: [
-                              const ListTile(
-                                title: Text('Embeds'),
-                                subtitle: Text('Open a provider in the embedded player.', style: AppTheme.metaStyle),
+                              ListTile(
+                                title: const Text('Embeds'),
+                                subtitle: Text(
+                                    'Open a provider in the embedded player.',
+                                    style: AppTheme.metaStyle(context)),
                               ),
-                              for (var index = 0; index < embedProviders.length; index++)
+                              for (var index = 0;
+                                  index < embedProviders.length;
+                                  index++)
                                 ListTile(
-                                  leading: const Icon(Icons.open_in_browser_outlined, color: AppTheme.textSecondary),
+                                  leading: Icon(
+                                      Icons.open_in_browser_outlined,
+                                      color: AppTheme.textSecondaryOf(context)),
                                   title: Text(embedProviders[index].name),
-                                  subtitle: const Text('Open embed player', style: AppTheme.metaStyle),
-                                  onTap: () => Navigator.of(sheetContext).pop(_StreamChoice.embed(index)),
+                                  subtitle: Text('Open embed player',
+                                      style: AppTheme.metaStyle(context)),
+                                  onTap: () => Navigator.of(sheetContext)
+                                      .pop(_StreamChoice.embed(index)),
                                 ),
                             ],
                           ),
@@ -417,7 +587,9 @@ class _DetailScreenState extends State<DetailScreen> {
   void _openWebViewEmbed(int providerIndex, {int? season, int? episode}) {
     // An embed is still playback. Keep an already-bookmarked title at the
     // front of this device's watchlist just like native playback does.
-    context.read<WatchlistProvider>().markWatched(widget.item.type, widget.item.id);
+    context
+        .read<WatchlistProvider>()
+        .markWatched(widget.item.type, widget.item.id);
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => WebViewPlayerScreen(
@@ -457,19 +629,22 @@ class _DetailScreenState extends State<DetailScreen> {
             return const LoadingIndicator(label: 'Loading details...');
           }
           if (snapshot.hasError) {
-            return ErrorView(message: 'Failed to load details.\n${snapshot.error}');
+            return ErrorView(
+                message: 'Failed to load details.\n${snapshot.error}');
           }
           final detail = snapshot.data!;
           final isTv = widget.item.type == MediaType.tv;
           final isDesktop = Responsive.isDesktop(context);
           final flutterView = View.of(context);
-          final displayWidth = flutterView.display.size.width / flutterView.devicePixelRatio;
-          final displayHeight = flutterView.display.size.height / flutterView.devicePixelRatio;
+          final displayWidth =
+              flutterView.display.size.width / flutterView.devicePixelRatio;
+          final displayHeight =
+              flutterView.display.size.height / flutterView.devicePixelRatio;
           final isResizableWindow =
               Theme.of(context).platform == TargetPlatform.iOS &&
-              MediaQuery.sizeOf(context).shortestSide >= 600 &&
-              (MediaQuery.sizeOf(context).width < displayWidth - 1 ||
-                  MediaQuery.sizeOf(context).height < displayHeight - 1);
+                  MediaQuery.sizeOf(context).shortestSide >= 600 &&
+                  (MediaQuery.sizeOf(context).width < displayWidth - 1 ||
+                      MediaQuery.sizeOf(context).height < displayHeight - 1);
           // iPadOS draws its compact-window controls over the upper-left
           // corner but does not expose their bounds as a safe-area inset.
           // Keep the page exactly unchanged and move only the Back button
@@ -494,16 +669,17 @@ class _DetailScreenState extends State<DetailScreen> {
                           fit: BoxFit.cover,
                         ),
                       Container(
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
-                            colors: [Colors.transparent, AppTheme.background],
+                            colors: [Colors.transparent, AppTheme.backgroundOf(context)],
                           ),
                         ),
                       ),
                       Positioned(
-                        top: MediaQuery.paddingOf(context).top + backButtonOffset,
+                        top: MediaQuery.paddingOf(context).top +
+                            backButtonOffset,
                         left: 8,
                         child: IconButton(
                           icon: const Icon(Icons.arrow_back),
@@ -516,7 +692,8 @@ class _DetailScreenState extends State<DetailScreen> {
                 ),
                 actions: [
                   IconButton(
-                    icon: Icon(isBookmarked ? Icons.bookmark : Icons.bookmark_border),
+                    icon: Icon(
+                        isBookmarked ? Icons.bookmark : Icons.bookmark_border),
                     onPressed: () => watchlist.toggle(detail.item),
                   ),
                 ],
@@ -528,7 +705,8 @@ class _DetailScreenState extends State<DetailScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       FadeInOnScroll(
-                        child: Text(detail.item.title, style: Theme.of(context).textTheme.headlineSmall),
+                        child: Text(detail.item.title,
+                            style: Theme.of(context).textTheme.headlineSmall),
                       ),
                       const SizedBox(height: 6),
                       FadeInOnScroll(
@@ -536,9 +714,13 @@ class _DetailScreenState extends State<DetailScreen> {
                         child: Wrap(
                           spacing: 8,
                           children: [
-                            if (detail.item.year.isNotEmpty) _Chip(detail.item.year),
-                            if (detail.runtimeMinutes != null) _Chip('${detail.runtimeMinutes}m'),
-                            _Chip('★ ${detail.item.voteAverage.toStringAsFixed(1)}', accent: true),
+                            if (detail.item.year.isNotEmpty)
+                              _Chip(detail.item.year),
+                            if (detail.runtimeMinutes != null)
+                              _Chip('${detail.runtimeMinutes}m'),
+                            _Chip(
+                                '★ ${detail.item.voteAverage.toStringAsFixed(1)}',
+                                accent: true),
                             for (final g in detail.genres.take(3)) _Chip(g),
                           ],
                         ),
@@ -548,23 +730,40 @@ class _DetailScreenState extends State<DetailScreen> {
                         delay: const Duration(milliseconds: 110),
                         child: Text(
                           detail.item.overview ?? '',
-                          style: const TextStyle(color: AppTheme.textSecondary),
+                          style: TextStyle(color: AppTheme.textSecondaryOf(context)),
                         ),
                       ),
                       const SizedBox(height: 20),
                       FadeInOnScroll(
                         delay: const Duration(milliseconds: 165),
                         child: !isTv
-                            ? ElevatedButton.icon(
-                                onPressed: _resolving ? null : () => _play(),
-                                icon: _resolving
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                      )
-                                    : const Icon(Icons.play_arrow),
-                                label: Text(_resolving ? (_resolvingStatus ?? 'Finding ad-free source...') : 'Play'),
+                            ? Wrap(
+                                spacing: 12,
+                                runSpacing: 10,
+                                children: [
+                                  ElevatedButton.icon(
+                                    onPressed:
+                                        _resolving ? null : () => _play(),
+                                    icon: _resolving
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white),
+                                          )
+                                        : const Icon(Icons.play_arrow),
+                                    label: Text(_resolving
+                                        ? (_resolvingStatus ??
+                                            'Finding ad-free source...')
+                                        : 'Play'),
+                                  ),
+                                  OutlinedButton.icon(
+                                    onPressed: () => _openTorrentPage(),
+                                    icon: const Icon(Icons.hub_outlined),
+                                    label: const Text('Torrent'),
+                                  ),
+                                ],
                               )
                             : _SeasonEpisodePicker(
                                 seasons: detail.seasons,
@@ -574,9 +773,9 @@ class _DetailScreenState extends State<DetailScreen> {
                                 resolving: _resolving,
                                 resolvingStatus: _resolvingStatus,
                                 onSeasonChanged: _onSeasonChanged,
-                                onPlayEpisode: (episode) => _play(season: _selectedSeason, episode: episode),
+                                onPlayEpisode: _openEpisodePage,
                               ),
-                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -599,48 +798,48 @@ class _DetailScreenState extends State<DetailScreen> {
                     child: SizedBox(
                       height: 150,
                       child: ListView.separated(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: detail.cast.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 12),
-                      itemBuilder: (context, i) {
-                        final c = detail.cast[i];
-                        return SizedBox(
-                          width: 90,
-                          child: InkWell(
-                            borderRadius: BorderRadius.circular(8),
-                            onTap: () => _openPerson(c.id, c.name),
-                            child: Column(
-                              children: [
-                                CircleAvatar(
-                                  radius: 36,
-                                  backgroundColor: AppTheme.surfaceVariant,
-                                  backgroundImage: c.profilePath != null
-                                      ? CachedNetworkImageProvider(
-                                          'https://image.tmdb.org/t/p/w200${c.profilePath}')
-                                      : null,
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  c.name,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  textAlign: TextAlign.center,
-                                  style: AppTheme.resolvedStyle(
-                                    context,
-                                    AppTheme.castNameStyle,
-                                    TextCategory.castDetails,
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: detail.cast.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 12),
+                        itemBuilder: (context, i) {
+                          final c = detail.cast[i];
+                          return SizedBox(
+                            width: 90,
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(8),
+                              onTap: () => _openPerson(c.id, c.name),
+                              child: Column(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 36,
+                                    backgroundColor: AppTheme.surfaceVariantOf(context),
+                                    backgroundImage: c.profilePath != null
+                                        ? CachedNetworkImageProvider(
+                                            'https://image.tmdb.org/t/p/w200${c.profilePath}')
+                                        : null,
                                   ),
-                                ),
-                              ],
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    c.name,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center,
+                                    style: AppTheme.resolvedStyle(
+                                      context,
+                                      AppTheme.castNameStyle(context),
+                                      TextCategory.castDetails,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        );
-                      },
+                          );
+                        },
+                      ),
                     ),
                   ),
                 ),
-              ),
               SliverToBoxAdapter(
                 child: FadeInOnScroll(
                   delay: const Duration(milliseconds: 80),
@@ -679,7 +878,7 @@ class _ProviderChoiceTile extends StatelessWidget {
         ? AppTheme.success
         : offline
             ? AppTheme.error
-            : AppTheme.textSecondary;
+            : AppTheme.textSecondaryOf(context);
     final healthText = health == null
         ? 'Status not available'
         : online
@@ -695,15 +894,21 @@ class _ProviderChoiceTile extends StatelessWidget {
       ),
       title: Text(provider.displayName),
       subtitle: Text(
-        content == null || content.isEmpty ? healthText : '$healthText · $content',
-        style: AppTheme.metaStyle,
+        content == null || content.isEmpty
+            ? healthText
+            : '$healthText · $content',
+        style: AppTheme.metaStyle(context),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
       ),
       trailing: health == null
           ? null
           : Text(
-              online ? 'Online' : offline ? 'Offline' : 'Untested',
+              online
+                  ? 'Online'
+                  : offline
+                      ? 'Offline'
+                      : 'Untested',
               style: TextStyle(color: color, fontWeight: FontWeight.w700),
             ),
       onTap: onTap,
@@ -725,14 +930,15 @@ class _Chip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: accent ? AppTheme.accent : AppTheme.surfaceVariant,
+        color: accent ? AppTheme.accent : AppTheme.surfaceVariantOf(context),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         label,
         style: accent
             ? AppTheme.badgeStyle
-            : AppTheme.resolvedStyle(context, AppTheme.metaStyle, TextCategory.info),
+            : AppTheme.resolvedStyle(
+                context, AppTheme.metaStyle(context), TextCategory.info),
       ),
     );
   }
@@ -757,14 +963,15 @@ class _SeasonEpisodePicker extends StatelessWidget {
   final bool resolving;
   final String? resolvingStatus;
   final ValueChanged<int> onSeasonChanged;
-  final ValueChanged<int> onPlayEpisode;
+  final ValueChanged<EpisodeSummary> onPlayEpisode;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Seasons', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        const Text('Seasons',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         const SizedBox(height: 8),
         SizedBox(
           // Poster (2:3 at width 100 -> 150 tall) + label gap + a text
@@ -787,7 +994,8 @@ class _SeasonEpisodePicker extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 20),
-        const Text('Episodes', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        const Text('Episodes',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
         const SizedBox(height: 8),
         if (resolving && resolvingStatus != null)
           Padding(
@@ -798,17 +1006,21 @@ class _SeasonEpisodePicker extends StatelessWidget {
                 const SizedBox(
                   width: 14,
                   height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: AppTheme.accent),
                 ),
                 const SizedBox(width: 8),
-                Text(resolvingStatus!, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                Text(resolvingStatus!,
+                    style: TextStyle(
+                        color: AppTheme.textSecondaryOf(context), fontSize: 12)),
               ],
             ),
           ),
         if (loadingEpisodes)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: CircularProgressIndicator(color: AppTheme.accent)),
+            child: Center(
+                child: CircularProgressIndicator(color: AppTheme.accent)),
           )
         else
           Column(
@@ -821,7 +1033,7 @@ class _SeasonEpisodePicker extends StatelessWidget {
                   child: _EpisodeRow(
                     episode: episodes[i],
                     enabled: !resolving,
-                    onTap: () => onPlayEpisode(episodes[i].episodeNumber),
+                    onTap: () => onPlayEpisode(episodes[i]),
                   ),
                 ),
               ],
@@ -833,7 +1045,8 @@ class _SeasonEpisodePicker extends StatelessWidget {
 }
 
 class _SeasonCard extends StatelessWidget {
-  const _SeasonCard({required this.season, required this.selected, required this.onTap});
+  const _SeasonCard(
+      {required this.season, required this.selected, required this.onTap});
 
   final SeasonSummary season;
   final bool selected;
@@ -860,11 +1073,11 @@ class _SeasonCard extends StatelessWidget {
                     color: selected ? AppTheme.accent : Colors.transparent,
                     width: 2,
                   ),
-                  color: AppTheme.surfaceVariant,
+                  color: AppTheme.surfaceVariantOf(context),
                 ),
                 child: posterUrl != null
                     ? CachedNetworkImage(imageUrl: posterUrl, fit: BoxFit.cover)
-                    : const Icon(Icons.tv, color: AppTheme.textSecondary),
+                    : Icon(Icons.tv, color: AppTheme.textSecondaryOf(context)),
               ),
             ),
             const SizedBox(height: 6),
@@ -874,7 +1087,7 @@ class _SeasonCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 12,
-                color: selected ? AppTheme.accent : AppTheme.textPrimary,
+                color: selected ? AppTheme.accent : AppTheme.textPrimaryOf(context),
                 fontWeight: selected ? FontWeight.bold : FontWeight.normal,
               ),
             ),
@@ -888,7 +1101,8 @@ class _SeasonCard extends StatelessWidget {
 /// Full-width episode row (thumbnail + title + summary) instead of a
 /// horizontally-scrolling card, so the synopsis actually has room to show.
 class _EpisodeRow extends StatelessWidget {
-  const _EpisodeRow({required this.episode, required this.enabled, required this.onTap});
+  const _EpisodeRow(
+      {required this.episode, required this.enabled, required this.onTap});
 
   final EpisodeSummary episode;
   final bool enabled;
@@ -916,28 +1130,34 @@ class _EpisodeRow extends StatelessWidget {
                         clipBehavior: Clip.antiAlias,
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(10),
-                          color: AppTheme.surfaceVariant,
+                          color: AppTheme.surfaceVariantOf(context),
                         ),
                         child: stillUrl != null
-                            ? CachedNetworkImage(imageUrl: stillUrl, fit: BoxFit.cover)
-                            : const Icon(Icons.image_not_supported_outlined, color: AppTheme.textSecondary),
+                            ? CachedNetworkImage(
+                                imageUrl: stillUrl, fit: BoxFit.cover)
+                            : Icon(Icons.image_not_supported_outlined,
+                                color: AppTheme.textSecondaryOf(context)),
                       ),
                     ),
                     Positioned(
                       left: 6,
                       bottom: 6,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: Colors.black87,
                           borderRadius: BorderRadius.circular(4),
                         ),
-                        child: Text('E${episode.episodeNumber}', style: const TextStyle(fontSize: 11, color: Colors.white)),
+                        child: Text('E${episode.episodeNumber}',
+                            style: const TextStyle(
+                                fontSize: 11, color: Colors.white)),
                       ),
                     ),
                     const Positioned.fill(
                       child: Center(
-                        child: Icon(Icons.play_circle_fill, color: Colors.white70, size: 30),
+                        child: Icon(Icons.play_circle_fill,
+                            color: Colors.white70, size: 30),
                       ),
                     ),
                   ],
@@ -955,7 +1175,8 @@ class _EpisodeRow extends StatelessWidget {
                         : 'Episode ${episode.episodeNumber}',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600),
                   ),
                   if ((episode.overview ?? '').isNotEmpty) ...[
                     const SizedBox(height: 4),
@@ -963,7 +1184,10 @@ class _EpisodeRow extends StatelessWidget {
                       episode.overview!,
                       maxLines: 3,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.3),
+                      style: TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondaryOf(context),
+                          height: 1.3),
                     ),
                   ],
                 ],

@@ -70,6 +70,44 @@ class AppTheme {
   static const Color textPrimary = Color(0xFFF5F5F7);
   static const Color textSecondary = Color(0xFFA8A5A0);
 
+  // --- Light palette (Settings > Appearance > Light, Watchly-style clean
+  // white look). Dark stays the app's default; this only applies once a
+  // user opts into ThemeMode.light. ---
+  static const Color lightBackground = Color(0xFFFFFFFF);
+  static const Color lightSurface = Color(0xFFFFFFFF);
+  static const Color lightSurfaceVariant = Color(0xFFF1F1F4);
+  static const Color lightSurfaceTertiary = Color(0xFFE7E7EC);
+  static const Color lightBorder = Color(0xFFE2E2E8);
+  static const Color lightBorderWarm = Color(0xFFD3D3DC);
+  static const Color lightTextPrimary = Color(0xFF14161A);
+  static const Color lightTextSecondary = Color(0xFF55585F);
+
+  static bool _isLight(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.light;
+
+  /// Brightness-aware reads of the surface/text constants above, for the
+  /// handful of widgets that paint with them directly instead of through
+  /// Theme.of(context) - see [themeFor]'s doc comment. Call sites that
+  /// already read Theme.of(context)/textTheme (buttons, Card, AppBar,
+  /// Divider, default body text) don't need these; they already follow
+  /// ThemeData's own light/dark branch below.
+  static Color backgroundOf(BuildContext context) =>
+      _isLight(context) ? lightBackground : background;
+  static Color surfaceOf(BuildContext context) =>
+      _isLight(context) ? lightSurface : surface;
+  static Color surfaceVariantOf(BuildContext context) =>
+      _isLight(context) ? lightSurfaceVariant : surfaceVariant;
+  static Color surfaceTertiaryOf(BuildContext context) =>
+      _isLight(context) ? lightSurfaceTertiary : surfaceTertiary;
+  static Color borderOf(BuildContext context) =>
+      _isLight(context) ? lightBorder : border;
+  static Color borderWarmOf(BuildContext context) =>
+      _isLight(context) ? lightBorderWarm : borderWarm;
+  static Color textPrimaryOf(BuildContext context) =>
+      _isLight(context) ? lightTextPrimary : textPrimary;
+  static Color textSecondaryOf(BuildContext context) =>
+      _isLight(context) ? lightTextSecondary : textSecondary;
+
   // --- Named text styles for different kinds of information, so a title,
   // a synopsis, a metadata line and a badge never look interchangeable
   // even when they sit right next to each other. ---
@@ -77,13 +115,17 @@ class AppTheme {
   /// Section/row headers ("Trending Now", "Popular", genre rail titles) -
   /// Instrument Serif with a touch of letter-spacing, distinct from the
   /// plain Space Grotesk body copy sitting directly below it in the row.
-  static const TextStyle sectionHeaderStyle = TextStyle(
-    fontFamily: serifFont,
-    fontSize: 21,
-    fontWeight: FontWeight.w500,
-    color: textPrimary,
-    letterSpacing: 0.2,
-  );
+  /// Takes [context] (unlike the other named styles below) because, unlike
+  /// [cardTitleStyle]/[heroTitleStyle], it sits on the plain page
+  /// background rather than over poster/backdrop art, so it has to follow
+  /// the light/dark theme rather than always being light-on-dark.
+  static TextStyle sectionHeaderStyle(BuildContext context) => TextStyle(
+        fontFamily: serifFont,
+        fontSize: 21,
+        fontWeight: FontWeight.w500,
+        color: textPrimaryOf(context),
+        letterSpacing: 0.2,
+      );
 
   /// Poster/media card titles - Space Grotesk, a little heavier than plain
   /// body text so a whole grid of cards still reads as titles first.
@@ -95,13 +137,15 @@ class AppTheme {
   );
 
   /// Small metadata under a title - year, episode tag, runtime, genre list
-  /// - always muted, always a size down from the title it sits under.
-  static const TextStyle metaStyle = TextStyle(
-    fontFamily: sansFont,
-    fontSize: 11,
-    fontWeight: FontWeight.w400,
-    color: textSecondary,
-  );
+  /// - always muted, always a size down from the title it sits under. Takes
+  /// [context] for the same reason as [sectionHeaderStyle]: it's plain page
+  /// text, not text painted over art.
+  static TextStyle metaStyle(BuildContext context) => TextStyle(
+        fontFamily: sansFont,
+        fontSize: 11,
+        fontWeight: FontWeight.w400,
+        color: textSecondaryOf(context),
+      );
 
   /// Hero banner / detail-screen title - the largest, most cinematic text
   /// in the app - Instrument Serif, matching reflixmovies.vercel.app's h1.
@@ -137,13 +181,15 @@ class AppTheme {
   /// Cast & crew name text under the cast row's avatar on the detail
   /// screen - plain Space Grotesk by default, its own customizable
   /// category ([TextCategory.castDetails]) since it sits so close to a
-  /// person's photo that a mismatched font reads oddly fast.
-  static const TextStyle castNameStyle = TextStyle(
-    fontFamily: sansFont,
-    fontSize: 12,
-    fontWeight: FontWeight.w500,
-    color: textPrimary,
-  );
+  /// person's photo that a mismatched font reads oddly fast. Sits on the
+  /// plain page background (not over the avatar photo), so - like
+  /// [sectionHeaderStyle]/[metaStyle] - it takes [context] to follow theme.
+  static TextStyle castNameStyle(BuildContext context) => TextStyle(
+        fontFamily: sansFont,
+        fontSize: 12,
+        fontWeight: FontWeight.w500,
+        color: textPrimaryOf(context),
+      );
 
   /// C.L.A.R.A.'s `--shine` gradient - the metallic gold sheen it uses for
   /// primary buttons and gradient-clipped brand text.
@@ -227,22 +273,50 @@ class AppTheme {
   /// widgets elsewhere in the app paint with the [accent] constant
   /// directly rather than through Theme.of(context) and won't repaint
   /// from this - see the Settings screen's "App Theme" section note.
-  static ThemeData themeFor({Color accentColor = accent, SettingsProvider? settings}) {
-    final base = ThemeData.dark(useMaterial3: true);
-    // ARK Play mixes the selected accent into all of its dark surfaces, not
-    // only buttons. Mirror that here so changing Accent Color recolors the
-    // complete Material shell while keeping the palette comfortably dark.
-    final themedBackground = Color.lerp(background, accentColor, 0.09)!;
-    final themedSurface = Color.lerp(surface, accentColor, 0.13)!;
-    final themedSurfaceVariant = Color.lerp(surfaceVariant, accentColor, 0.19)!;
-    final themedBorder = Color.lerp(border, accentColor, 0.35)!;
-    final themedSurfaceTertiary = Color.lerp(surfaceTertiary, accentColor, 0.16)!;
+  ///
+  /// [brightness] picks the dark (default, unchanged from before this
+  /// param existed) or light palette - see [lightBackground] etc. Both
+  /// branches build through the exact same component-theme structure below
+  /// so buttons/nav/dividers/popups stay visually consistent across the
+  /// toggle, just recolored.
+  static ThemeData themeFor({
+    Color accentColor = accent,
+    SettingsProvider? settings,
+    Brightness brightness = Brightness.dark,
+  }) {
+    final isLight = brightness == Brightness.light;
+    final base = isLight
+        ? ThemeData.light(useMaterial3: true)
+        : ThemeData.dark(useMaterial3: true);
+    final baseBackground = isLight ? lightBackground : background;
+    final baseSurface = isLight ? lightSurface : surface;
+    final baseSurfaceVariant = isLight ? lightSurfaceVariant : surfaceVariant;
+    final baseSurfaceTertiary = isLight ? lightSurfaceTertiary : surfaceTertiary;
+    final baseBorder = isLight ? lightBorder : border;
+    final baseBorderWarm = isLight ? lightBorderWarm : borderWarm;
+    final basePrimaryText = isLight ? lightTextPrimary : textPrimary;
+    final baseSecondaryText = isLight ? lightTextSecondary : textSecondary;
+
+    // ARK Play mixes the selected accent into all of its surfaces, not only
+    // buttons. Mirror that here so changing Accent Color recolors the
+    // complete Material shell - lighter mix on the light palette so a
+    // strong accent doesn't muddy an otherwise clean white background.
+    final themedBackground =
+        Color.lerp(baseBackground, accentColor, isLight ? 0.035 : 0.09)!;
+    final themedSurface =
+        Color.lerp(baseSurface, accentColor, isLight ? 0.05 : 0.13)!;
+    final themedSurfaceVariant =
+        Color.lerp(baseSurfaceVariant, accentColor, isLight ? 0.07 : 0.19)!;
+    final themedBorder =
+        Color.lerp(baseBorder, accentColor, isLight ? 0.18 : 0.35)!;
+    final themedSurfaceTertiary =
+        Color.lerp(baseSurfaceTertiary, accentColor, isLight ? 0.06 : 0.16)!;
     final defaultTextTheme = _textTheme(base.textTheme).apply(
-      bodyColor: textPrimary,
-      displayColor: textPrimary,
+      bodyColor: basePrimaryText,
+      displayColor: basePrimaryText,
     );
     final bodyStyle = _configuredStyle(
-      const TextStyle(fontFamily: sansFont, color: textPrimary),
+      TextStyle(fontFamily: sansFont, color: basePrimaryText),
       settings,
       TextCategory.body,
     );
@@ -262,7 +336,7 @@ class AppTheme {
       TextCategory.navigation,
     );
     final unselectedNavigationStyle = _configuredStyle(
-      const TextStyle(fontFamily: sansFont, color: textSecondary),
+      TextStyle(fontFamily: sansFont, color: baseSecondaryText),
       settings,
       TextCategory.navigation,
     );
@@ -275,14 +349,14 @@ class AppTheme {
         secondary: accentColor,
         surface: themedSurface,
         surfaceVariant: themedSurfaceVariant,
-        onSurface: textPrimary,
+        onSurface: basePrimaryText,
         error: error,
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        foregroundColor: textPrimary,
-        titleTextStyle: textTheme.titleLarge?.copyWith(color: textPrimary),
+        foregroundColor: basePrimaryText,
+        titleTextStyle: textTheme.titleLarge?.copyWith(color: basePrimaryText),
       ),
       cardColor: themedSurface,
       dividerColor: themedBorder,
@@ -298,8 +372,8 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: textPrimary,
-          side: const BorderSide(color: borderWarm),
+          foregroundColor: basePrimaryText,
+          side: BorderSide(color: baseBorderWarm),
           textStyle: buttonTextStyle,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),
         ),
@@ -316,7 +390,7 @@ class AppTheme {
         textStyle: textTheme.bodyMedium,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: border),
+          side: BorderSide(color: baseBorder),
         ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
@@ -327,7 +401,7 @@ class AppTheme {
       navigationRailTheme: NavigationRailThemeData(
         backgroundColor: Colors.transparent,
         selectedIconTheme: IconThemeData(color: accentColor),
-        unselectedIconTheme: const IconThemeData(color: textSecondary),
+        unselectedIconTheme: IconThemeData(color: baseSecondaryText),
         selectedLabelTextStyle: selectedNavigationStyle,
         unselectedLabelTextStyle: unselectedNavigationStyle,
       ),
@@ -335,7 +409,7 @@ class AppTheme {
         backgroundColor: Colors.transparent,
         elevation: 0,
         selectedItemColor: accentColor,
-        unselectedItemColor: textSecondary,
+        unselectedItemColor: baseSecondaryText,
         selectedLabelStyle: selectedNavigationStyle,
         unselectedLabelStyle: unselectedNavigationStyle,
       ),
@@ -347,7 +421,7 @@ class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         backgroundColor: themedSurfaceTertiary,
-        contentTextStyle: textTheme.bodyMedium?.copyWith(color: textPrimary),
+        contentTextStyle: textTheme.bodyMedium?.copyWith(color: basePrimaryText),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
     );

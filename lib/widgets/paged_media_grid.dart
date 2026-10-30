@@ -136,7 +136,7 @@ class _PagedMediaGridState extends State<PagedMediaGrid> {
       );
     }
     if (_items.isEmpty) {
-      return const Center(child: Text('No results', style: TextStyle(color: AppTheme.textSecondary)));
+      return Center(child: Text('No results', style: TextStyle(color: AppTheme.textSecondaryOf(context))));
     }
 
     final columns = Responsive.gridColumns(context);
@@ -177,9 +177,9 @@ class _PagedMediaGridState extends State<PagedMediaGrid> {
                         ? Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text(
+                              Text(
                                 'Could not load more titles.',
-                                style: TextStyle(color: AppTheme.textSecondary),
+                                style: TextStyle(color: AppTheme.textSecondaryOf(context)),
                               ),
                               const SizedBox(height: 8),
                               OutlinedButton(

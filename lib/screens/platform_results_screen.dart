@@ -112,10 +112,10 @@ class _PlatformResultsScreenState extends State<PlatformResultsScreen> {
                     onSelectionChanged: (selection) => _setMediaType(selection.first),
                     style: ButtonStyle(
                       foregroundColor: WidgetStateProperty.resolveWith(
-                        (states) => states.contains(WidgetState.selected) ? Colors.white : AppTheme.textSecondary,
+                        (states) => states.contains(WidgetState.selected) ? Colors.white : AppTheme.textSecondaryOf(context),
                       ),
                       backgroundColor: WidgetStateProperty.resolveWith(
-                        (states) => states.contains(WidgetState.selected) ? AppTheme.accent : AppTheme.surfaceVariant,
+                        (states) => states.contains(WidgetState.selected) ? AppTheme.accent : AppTheme.surfaceVariantOf(context),
                       ),
                     ),
                   ),

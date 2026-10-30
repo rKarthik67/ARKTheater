@@ -75,9 +75,9 @@ class _MultiSelectFilterSheetState extends State<_MultiSelectFilterSheet> {
 
   Widget _sectionLabel(String text) => Text(
         text,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.bold,
-          color: AppTheme.textSecondary,
+          color: AppTheme.textSecondaryOf(context),
           fontSize: 13,
         ),
       );
@@ -130,9 +130,9 @@ class _MultiSelectFilterSheetState extends State<_MultiSelectFilterSheet> {
                             onSelected: (_) => _toggleGenre(g.id),
                             selectedColor: AppTheme.accent,
                             checkmarkColor: Colors.white,
-                            backgroundColor: AppTheme.surfaceVariant,
+                            backgroundColor: AppTheme.surfaceVariantOf(context),
                             labelStyle: TextStyle(
-                              color: _genreIds.contains(g.id) ? Colors.white : AppTheme.textPrimary,
+                              color: _genreIds.contains(g.id) ? Colors.white : AppTheme.textPrimaryOf(context),
                               fontSize: 12,
                               fontWeight: _genreIds.contains(g.id) ? FontWeight.bold : FontWeight.normal,
                             ),
@@ -154,9 +154,9 @@ class _MultiSelectFilterSheetState extends State<_MultiSelectFilterSheet> {
                             onSelected: (_) => _toggleYear(y),
                             selectedColor: AppTheme.accent,
                             checkmarkColor: Colors.white,
-                            backgroundColor: AppTheme.surfaceVariant,
+                            backgroundColor: AppTheme.surfaceVariantOf(context),
                             labelStyle: TextStyle(
-                              color: _years.contains(y) ? Colors.white : AppTheme.textPrimary,
+                              color: _years.contains(y) ? Colors.white : AppTheme.textPrimaryOf(context),
                               fontSize: 12,
                               fontWeight: _years.contains(y) ? FontWeight.bold : FontWeight.normal,
                             ),
@@ -216,13 +216,13 @@ class FilterSheetButton extends StatelessWidget {
         avatar: Icon(
           Icons.filter_list,
           size: 18,
-          color: active ? Colors.white : AppTheme.textSecondary,
+          color: active ? Colors.white : AppTheme.textSecondaryOf(context),
         ),
         label: Text(active ? 'Filters ($activeCount)' : 'Filters'),
         onPressed: onTap,
-        backgroundColor: active ? AppTheme.accent : AppTheme.surfaceVariant,
+        backgroundColor: active ? AppTheme.accent : AppTheme.surfaceVariantOf(context),
         labelStyle: TextStyle(
-          color: active ? Colors.white : AppTheme.textPrimary,
+          color: active ? Colors.white : AppTheme.textPrimaryOf(context),
           fontSize: 12,
           fontWeight: active ? FontWeight.bold : FontWeight.normal,
         ),

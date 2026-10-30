@@ -54,6 +54,11 @@ android {
 
     buildTypes {
         release {
+            // libtorrent4j resolves generated SWIG callbacks from native
+            // code. Keep release bytecode intact: a shrinker cannot see
+            // those JNI-only calls and removes callback methods at runtime.
+            isMinifyEnabled = false
+            isShrinkResources = false
             // A GitHub Release must always use the same certificate as the
             // installed app, otherwise Android refuses it as an update.
             if (keystorePropertiesFile.exists()) {
@@ -94,6 +99,22 @@ configurations.all {
             )
         }
     }
+}
+
+dependencies {
+    // Torrent streams default to the app's own ExoPlayer-based player (see
+    // TorrentHttpServer.kt's localhost range server), same as every other
+    // provider source. "Play in VLC" hands the resolved local stream URL
+    // to the viewer's own installed VLC app via Intent instead (see
+    // MainActivity's playExternalVlc handler) - no bundled libVLC needed.
+    // Native libtorrent bindings used only by the Android torrent source.
+    // Each ABI is packaged separately so Play/Android can install the
+    // matching libtorrent4j.so on phones, TVs, and emulators.
+    implementation("org.libtorrent4j:libtorrent4j:2.1.0-39")
+    implementation("org.libtorrent4j:libtorrent4j-android-arm:2.1.0-39")
+    implementation("org.libtorrent4j:libtorrent4j-android-arm64:2.1.0-39")
+    implementation("org.libtorrent4j:libtorrent4j-android-x86:2.1.0-39")
+    implementation("org.libtorrent4j:libtorrent4j-android-x86_64:2.1.0-39")
 }
 
 flutter {

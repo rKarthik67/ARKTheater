@@ -57,10 +57,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
       body: !watchlist.isLoaded
           ? const SizedBox.shrink()
           : items.isEmpty
-              ? const Center(
+              ? Center(
                   child: Text(
                     'Titles you bookmark show up here.',
-                    style: TextStyle(color: AppTheme.textSecondary),
+                    style: TextStyle(color: AppTheme.textSecondaryOf(context)),
                   ),
                 )
               : Column(
@@ -84,10 +84,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                         onSelectionChanged: (selection) => setState(() => _mediaType = selection.first),
                         style: ButtonStyle(
                           foregroundColor: WidgetStateProperty.resolveWith(
-                            (states) => states.contains(WidgetState.selected) ? Colors.white : AppTheme.textSecondary,
+                            (states) => states.contains(WidgetState.selected) ? Colors.white : AppTheme.textSecondaryOf(context),
                           ),
                           backgroundColor: WidgetStateProperty.resolveWith(
-                            (states) => states.contains(WidgetState.selected) ? AppTheme.accent : AppTheme.surfaceVariant,
+                            (states) => states.contains(WidgetState.selected) ? AppTheme.accent : AppTheme.surfaceVariantOf(context),
                           ),
                         ),
                       ),
@@ -101,13 +101,13 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                           labelText: 'Sort by',
                           prefixIcon: const Icon(Icons.sort),
                           filled: true,
-                          fillColor: AppTheme.surfaceVariant,
+                          fillColor: AppTheme.surfaceVariantOf(context),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: AppTheme.border),
+                            borderSide: BorderSide(color: AppTheme.borderOf(context)),
                           ),
                         ),
-                        dropdownColor: AppTheme.surfaceVariant,
+                        dropdownColor: AppTheme.surfaceVariantOf(context),
                         items: WatchlistSort.values
                             .map(
                               (sort) => DropdownMenuItem(
@@ -141,10 +141,10 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                                   },
                                 ),
                           filled: true,
-                          fillColor: AppTheme.surfaceVariant,
+                          fillColor: AppTheme.surfaceVariantOf(context),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: AppTheme.border),
+                            borderSide: BorderSide(color: AppTheme.borderOf(context)),
                           ),
                         ),
                       ),
@@ -158,7 +158,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                                     : _mediaType == MediaType.movie
                                     ? 'No movies in your watchlist yet.'
                                     : 'No TV shows in your watchlist yet.',
-                                style: const TextStyle(color: AppTheme.textSecondary),
+                                style: TextStyle(color: AppTheme.textSecondaryOf(context)),
                               ),
                             )
                           : GridView.builder(

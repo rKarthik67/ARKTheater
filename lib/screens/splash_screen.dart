@@ -109,7 +109,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       // stuck waiting on an animation (or a sound backend that hung).
       onTap: _finish,
       child: Scaffold(
-        backgroundColor: AppTheme.background,
+        backgroundColor: AppTheme.backgroundOf(context),
         body: Center(
           child: AnimatedBuilder(
             animation: _controller,

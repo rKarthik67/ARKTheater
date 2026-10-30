@@ -83,6 +83,15 @@ class LiquidGlass extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final base = tint ?? Colors.white;
+    // A white hairline/corner-highlight (the recipe below) reads as a
+    // visible edge against C.L.A.R.A.'s near-black dark surfaces, but is
+    // invisible against Settings > Appearance > Light's near-white ones -
+    // so the hairline/sheen flip to a dark-neutral tint in light mode
+    // while the glass tint itself, and the shadow, stay the same: both
+    // already read fine over the varied/scrolling content (video, posters)
+    // this widget actually layers on top of in either theme.
+    final isLight = Theme.of(context).brightness == Brightness.light;
+    final edgeTint = isLight ? Colors.black : Colors.white;
 
     // Falls back to the default scale (1.0) if SettingsProvider isn't in
     // the tree yet (e.g. a widget test that doesn't wire providers) -
@@ -107,7 +116,7 @@ class LiquidGlass extends StatelessWidget {
         color: base.withOpacity(effectiveOpacity),
         border: Border.all(
           // inset 0 0 0 1px rgba(255,255,255,0.15)
-          color: borderColor ?? Colors.white.withOpacity(0.15),
+          color: borderColor ?? edgeTint.withOpacity(isLight ? 0.10 : 0.15),
           width: 1,
         ),
         boxShadow: [
@@ -151,9 +160,9 @@ class LiquidGlass extends StatelessWidget {
               center: Alignment.topLeft,
               radius: 1.3,
               colors: [
-                Colors.white.withOpacity(0.5),
-                Colors.white.withOpacity(0.12),
-                Colors.white.withOpacity(0.0),
+                edgeTint.withOpacity(isLight ? 0.16 : 0.5),
+                edgeTint.withOpacity(isLight ? 0.05 : 0.12),
+                edgeTint.withOpacity(0.0),
               ],
               stops: const [0.0, 0.18, 0.75],
             ),

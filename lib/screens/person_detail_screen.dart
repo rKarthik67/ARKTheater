@@ -95,10 +95,10 @@ class _PersonDetailScreenState extends State<PersonDetailScreen>
                                       fit: BoxFit.cover,
                                     )
                                   : Container(
-                                      color: AppTheme.surfaceVariant,
-                                      child: const Icon(
+                                      color: AppTheme.surfaceVariantOf(context),
+                                      child: Icon(
                                         Icons.person_outline,
-                                        color: AppTheme.textSecondary,
+                                        color: AppTheme.textSecondaryOf(context),
                                         size: 40,
                                       ),
                                     ),
@@ -114,12 +114,12 @@ class _PersonDetailScreenState extends State<PersonDetailScreen>
                                 if (person.birthday != null)
                                   Text(
                                     'Born: ${person.birthday}',
-                                    style: const TextStyle(color: AppTheme.textSecondary),
+                                    style: TextStyle(color: AppTheme.textSecondaryOf(context)),
                                   ),
                                 if (person.placeOfBirth != null)
                                   Text(
                                     person.placeOfBirth!,
-                                    style: const TextStyle(color: AppTheme.textSecondary),
+                                    style: TextStyle(color: AppTheme.textSecondaryOf(context)),
                                   ),
                               ],
                             ),
@@ -132,7 +132,7 @@ class _PersonDetailScreenState extends State<PersonDetailScreen>
                         const SizedBox(height: 8),
                         Text(
                           person.biography!,
-                          style: const TextStyle(color: AppTheme.textSecondary),
+                          style: TextStyle(color: AppTheme.textSecondaryOf(context)),
                         ),
                       ],
                     ],
@@ -146,7 +146,7 @@ class _PersonDetailScreenState extends State<PersonDetailScreen>
                     TabBar(
                       controller: _tabController,
                       labelColor: AppTheme.accent,
-                      unselectedLabelColor: AppTheme.textSecondary,
+                      unselectedLabelColor: AppTheme.textSecondaryOf(context),
                       indicatorColor: AppTheme.accent,
                       tabs: [
                         Tab(text: 'Movies (${movies.length})'),
@@ -157,12 +157,12 @@ class _PersonDetailScreenState extends State<PersonDetailScreen>
                 ),
             ],
             body: person.knownFor.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 24),
+                ? Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 24),
                     child: Center(
                       child: Text(
                         'No filmography found.',
-                        style: TextStyle(color: AppTheme.textSecondary),
+                        style: TextStyle(color: AppTheme.textSecondaryOf(context)),
                       ),
                     ),
                   )
@@ -204,7 +204,7 @@ class _TabBarHeaderDelegate extends SliverPersistentHeaderDelegate {
 
   @override
   Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
-    return ColoredBox(color: AppTheme.background, child: tabBar);
+    return ColoredBox(color: AppTheme.backgroundOf(context), child: tabBar);
   }
 
   @override
@@ -230,7 +230,7 @@ class _FilmographyGrid extends StatelessWidget {
   Widget build(BuildContext context) {
     if (items.isEmpty) {
       return Center(
-        child: Text(emptyLabel, style: const TextStyle(color: AppTheme.textSecondary)),
+        child: Text(emptyLabel, style: TextStyle(color: AppTheme.textSecondaryOf(context))),
       );
     }
     final columns = Responsive.gridColumns(context);

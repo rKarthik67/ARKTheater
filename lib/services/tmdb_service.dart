@@ -31,7 +31,8 @@ class TmdbService {
   Map<String, dynamic> get _auth => {'api_key': AppConfig.tmdbApiKey};
 
   Future<List<MediaItem>> trending(MediaType type) async {
-    final path = type == MediaType.movie ? '/trending/movie/week' : '/trending/tv/week';
+    final path =
+        type == MediaType.movie ? '/trending/movie/week' : '/trending/tv/week';
     final res = await _dio.get(path, queryParameters: _auth);
     return _mapResults(res.data, type);
   }
@@ -59,9 +60,13 @@ class TmdbService {
     MediaType type, {
     int page = 1,
   }) async {
-    final path = type == MediaType.movie ? '/trending/movie/week' : '/trending/tv/week';
+    final path =
+        type == MediaType.movie ? '/trending/movie/week' : '/trending/tv/week';
     final res = await _dio.get(path, queryParameters: {..._auth, 'page': page});
-    return (items: _mapResults(res.data, type), totalPages: _totalPages(res.data));
+    return (
+      items: _mapResults(res.data, type),
+      totalPages: _totalPages(res.data)
+    );
   }
 
   /// Paginated twin of [popular].
@@ -71,7 +76,10 @@ class TmdbService {
   }) async {
     final path = type == MediaType.movie ? '/movie/popular' : '/tv/popular';
     final res = await _dio.get(path, queryParameters: {..._auth, 'page': page});
-    return (items: _mapResults(res.data, type), totalPages: _totalPages(res.data));
+    return (
+      items: _mapResults(res.data, type),
+      totalPages: _totalPages(res.data)
+    );
   }
 
   /// Paginated twin of [topRated].
@@ -81,14 +89,22 @@ class TmdbService {
   }) async {
     final path = type == MediaType.movie ? '/movie/top_rated' : '/tv/top_rated';
     final res = await _dio.get(path, queryParameters: {..._auth, 'page': page});
-    return (items: _mapResults(res.data, type), totalPages: _totalPages(res.data));
+    return (
+      items: _mapResults(res.data, type),
+      totalPages: _totalPages(res.data)
+    );
   }
 
   /// Paginated twin of [nowPlaying] (movies only - TMDB has no TV
   /// "now playing" endpoint).
-  Future<({List<MediaItem> items, int totalPages})> nowPlayingPaged({int page = 1}) async {
-    final res = await _dio.get('/movie/now_playing', queryParameters: {..._auth, 'page': page});
-    return (items: _mapResults(res.data, MediaType.movie), totalPages: _totalPages(res.data));
+  Future<({List<MediaItem> items, int totalPages})> nowPlayingPaged(
+      {int page = 1}) async {
+    final res = await _dio
+        .get('/movie/now_playing', queryParameters: {..._auth, 'page': page});
+    return (
+      items: _mapResults(res.data, MediaType.movie),
+      totalPages: _totalPages(res.data)
+    );
   }
 
   /// Combined movie+TV title search - superseded by [searchMovies]/
@@ -105,10 +121,9 @@ class TmdbService {
     return results
         .where((r) => r['media_type'] == 'movie' || r['media_type'] == 'tv')
         .map((r) {
-          final type = r['media_type'] == 'movie' ? MediaType.movie : MediaType.tv;
-          return MediaItem.fromTmdbJson(r as Map<String, dynamic>, type);
-        })
-        .toList();
+      final type = r['media_type'] == 'movie' ? MediaType.movie : MediaType.tv;
+      return MediaItem.fromTmdbJson(r as Map<String, dynamic>, type);
+    }).toList();
   }
 
   /// Title search scoped to movies - powers the Search screen's Movies tab.
@@ -205,7 +220,9 @@ class TmdbService {
       'page': page,
     });
     final results = (res.data['results'] as List? ?? []);
-    return results.map((p) => PersonSummary.fromJson(p as Map<String, dynamic>)).toList();
+    return results
+        .map((p) => PersonSummary.fromJson(p as Map<String, dynamic>))
+        .toList();
   }
 
   /// A TV show's total season count - only fetched on demand (e.g. the
@@ -224,15 +241,30 @@ class TmdbService {
   /// hero banner's "Trailer" button, mirroring the reference ARKPlay web
   /// app's HeroSlide trailer modal.
   Future<String?> trailerYoutubeKey(MediaType type, int id) async {
-    final path = type == MediaType.movie ? '/movie/$id/videos' : '/tv/$id/videos';
+    final path =
+        type == MediaType.movie ? '/movie/$id/videos' : '/tv/$id/videos';
     final res = await _dio.get(path, queryParameters: _auth);
-    final results = (res.data['results'] as List? ?? []).cast<Map<String, dynamic>>();
+    final results =
+        (res.data['results'] as List? ?? []).cast<Map<String, dynamic>>();
     if (results.isEmpty) return null;
     final trailer = results.firstWhere(
       (v) => v['site'] == 'YouTube' && v['type'] == 'Trailer',
-      orElse: () => results.firstWhere((v) => v['site'] == 'YouTube', orElse: () => const {}),
+      orElse: () => results.firstWhere((v) => v['site'] == 'YouTube',
+          orElse: () => const {}),
     );
     return trailer['key'] as String?;
+  }
+
+  /// IMDb is the identifier used by the torrent-source catalogue endpoints.
+  /// Keep the conversion at TMDB's official external-ID endpoint rather than
+  /// guessing from a title/year search, which is ambiguous for remakes.
+  Future<String?> imdbId(MediaType type, int id) async {
+    final path = type == MediaType.movie
+        ? '/movie/$id/external_ids'
+        : '/tv/$id/external_ids';
+    final response = await _dio.get(path, queryParameters: _auth);
+    final value = response.data['imdb_id']?.toString();
+    return value == null || value.isEmpty ? null : value;
   }
 
   Future<MediaDetail> details(int id, MediaType type) async {
@@ -274,13 +306,16 @@ class TmdbService {
     if (collectionId is int) {
       collectionName = collection?['name'] as String?;
       try {
-        final response = await _dio.get('/collection/$collectionId', queryParameters: _auth);
+        final response =
+            await _dio.get('/collection/$collectionId', queryParameters: _auth);
         final parts = response.data['parts'] as List? ?? const [];
         collectionItems = parts
-            .map((part) => MediaItem.fromTmdbJson(part as Map<String, dynamic>, MediaType.movie))
+            .map((part) => MediaItem.fromTmdbJson(
+                part as Map<String, dynamic>, MediaType.movie))
             .where((part) => part.id != id)
             .toList()
-          ..sort((a, b) => (a.releaseDate ?? '').compareTo(b.releaseDate ?? ''));
+          ..sort(
+              (a, b) => (a.releaseDate ?? '').compareTo(b.releaseDate ?? ''));
       } catch (_) {
         // The title detail is still useful if a collection endpoint is
         // temporarily unavailable, so do not fail the entire page.
@@ -349,10 +384,24 @@ class TmdbService {
   /// Episodes for one season - powers the poster-style episode picker on
   /// DetailScreen, mirroring the reference web app's `fetchEpisodes`.
   Future<List<EpisodeSummary>> episodes(int tvId, int seasonNumber) async {
-    final res = await _dio.get('/tv/$tvId/season/$seasonNumber', queryParameters: _auth);
+    final res = await _dio.get('/tv/$tvId/season/$seasonNumber',
+        queryParameters: _auth);
     final episodes = (res.data['episodes'] as List? ?? []);
     return episodes
         .map((e) => EpisodeSummary.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Episode-specific credits are separate from a show's regular cast.
+  Future<List<CastMember>> episodeCast(int tvId, int seasonNumber, int episodeNumber) async {
+    final res = await _dio.get(
+      '/tv/$tvId/season/$seasonNumber/episode/$episodeNumber/credits',
+      queryParameters: _auth,
+    );
+    return (res.data['cast'] as List? ?? [])
+        .whereType<Map>()
+        .map((value) => CastMember.fromJson(Map<String, dynamic>.from(value)))
+        .take(20)
         .toList();
   }
 
@@ -360,7 +409,8 @@ class TmdbService {
   /// Action is 28 for movies, "Action & Adventure" is 10759 for TV), so
   /// this is fetched per media type.
   Future<List<Genre>> genres(MediaType type) async {
-    final path = type == MediaType.movie ? '/genre/movie/list' : '/genre/tv/list';
+    final path =
+        type == MediaType.movie ? '/genre/movie/list' : '/genre/tv/list';
     final res = await _dio.get(path, queryParameters: _auth);
     final list = (res.data['genres'] as List? ?? []);
     return list.map((g) => Genre.fromJson(g as Map<String, dynamic>)).toList();
@@ -371,7 +421,8 @@ class TmdbService {
   /// the same `discover/{movie,tv}?with_original_language=` pattern the
   /// reference ARKPlay web app's Home.js uses for its language rows,
   /// extended here to cover TV shows too (the reference only did movies).
-  Future<List<MediaItem>> discoverByLanguage(MediaType type, String languageCode) async {
+  Future<List<MediaItem>> discoverByLanguage(
+      MediaType type, String languageCode) async {
     final result = await discover(type, languageCode: languageCode);
     return result.items;
   }
@@ -408,7 +459,9 @@ class TmdbService {
     String sortBy = 'popularity.desc',
   }) async {
     final path = type == MediaType.movie ? '/discover/movie' : '/discover/tv';
-    final yearField = type == MediaType.movie ? 'primary_release_year' : 'first_air_date_year';
+    final yearField = type == MediaType.movie
+        ? 'primary_release_year'
+        : 'first_air_date_year';
 
     Map<String, dynamic> baseParams() {
       final params = <String, dynamic>{
@@ -432,13 +485,19 @@ class TmdbService {
 
     if (years == null || years.isEmpty) {
       final res = await _dio.get(path, queryParameters: baseParams());
-      return (items: _mapResults(res.data, type), totalPages: _totalPages(res.data));
+      return (
+        items: _mapResults(res.data, type),
+        totalPages: _totalPages(res.data)
+      );
     }
 
     if (years.length == 1) {
       final params = baseParams()..[yearField] = years.first;
       final res = await _dio.get(path, queryParameters: params);
-      return (items: _mapResults(res.data, type), totalPages: _totalPages(res.data));
+      return (
+        items: _mapResults(res.data, type),
+        totalPages: _totalPages(res.data)
+      );
     }
 
     // Bounded to 3 concurrent requests rather than firing all of them at
@@ -447,7 +506,10 @@ class TmdbService {
     // however many other installs of this app, which was tipping TMDB's
     // rate limit and causing spurious failures.
     final responses = await _runWithLimitedConcurrency<Response>(
-      [for (final y in years) () => _dio.get(path, queryParameters: baseParams()..[yearField] = y)],
+      [
+        for (final y in years)
+          () => _dio.get(path, queryParameters: baseParams()..[yearField] = y)
+      ],
     );
 
     final lists = [for (final res in responses) _mapResults(res.data, type)];
@@ -487,7 +549,8 @@ class TmdbService {
   /// resolve logos for [kOttPlatforms]. Entries with no commonsLogo fall
   /// back to this.
   Future<Map<int, String>> watchProviderLogos() async {
-    final res = await _dio.get('/watch/providers/movie', queryParameters: _auth);
+    final res =
+        await _dio.get('/watch/providers/movie', queryParameters: _auth);
     final results = (res.data['results'] as List?) ?? const [];
     return {
       for (final entry in results)
@@ -523,10 +586,9 @@ class TmdbService {
     final knownFor = castCredits
         .where((c) => c['media_type'] == 'movie' || c['media_type'] == 'tv')
         .map((c) {
-          final type = c['media_type'] == 'movie' ? MediaType.movie : MediaType.tv;
-          return MediaItem.fromTmdbJson(c as Map<String, dynamic>, type);
-        })
-        .toList()
+      final type = c['media_type'] == 'movie' ? MediaType.movie : MediaType.tv;
+      return MediaItem.fromTmdbJson(c as Map<String, dynamic>, type);
+    }).toList()
       ..sort((a, b) => b.voteAverage.compareTo(a.voteAverage));
 
     // combined_credits can list the same title twice (different character
@@ -543,7 +605,8 @@ class TmdbService {
     return PersonDetail(
       id: personJson['id'] as int,
       name: personJson['name'] as String? ?? '',
-      biography: (biography == null || biography.trim().isEmpty) ? null : biography,
+      biography:
+          (biography == null || biography.trim().isEmpty) ? null : biography,
       profilePath: personJson['profile_path'] as String?,
       birthday: personJson['birthday'] as String?,
       placeOfBirth: personJson['place_of_birth'] as String?,
@@ -565,7 +628,10 @@ class _RetryOnTransientFailureInterceptor extends Interceptor {
 
   final Dio _dio;
 
-  static const _retryDelays = [Duration(milliseconds: 400), Duration(milliseconds: 900)];
+  static const _retryDelays = [
+    Duration(milliseconds: 400),
+    Duration(milliseconds: 900)
+  ];
 
   bool _isTransient(DioException err) {
     switch (err.type) {
@@ -583,7 +649,8 @@ class _RetryOnTransientFailureInterceptor extends Interceptor {
   }
 
   @override
-  Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
+  Future<void> onError(
+      DioException err, ErrorInterceptorHandler handler) async {
     final attempt = (err.requestOptions.extra['retryAttempt'] as int?) ?? 0;
     if (!_isTransient(err) || attempt >= _retryDelays.length) {
       handler.next(err);
@@ -625,6 +692,7 @@ Future<List<T>> _runWithLimitedConcurrency<T>(
     }
   }
 
-  await Future.wait(List.generate(limit.clamp(1, tasks.length), (_) => worker()));
+  await Future.wait(
+      List.generate(limit.clamp(1, tasks.length), (_) => worker()));
   return results.cast<T>();
 }

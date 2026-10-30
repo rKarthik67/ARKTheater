@@ -7,6 +7,7 @@ import '../core/app_fonts.dart';
 import '../core/theme.dart';
 import '../models/media_item.dart';
 import '../services/playback_position_service.dart';
+import '../services/torrent_stream_service.dart';
 import '../services/github_update_service.dart';
 import '../services/watchlist_backup_service.dart';
 import '../state/recently_watched_provider.dart';
@@ -71,13 +72,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-          backgroundColor: AppTheme.surface,
+          backgroundColor: AppTheme.surfaceOf(context),
           title: Text('Version ${update.version} is ready'),
           content: Text(
             update.notes.trim().isEmpty
                 ? 'Download the signed APK from GitHub and open Android\'s installer?'
                 : update.notes,
-            style: AppTheme.metaStyle,
+            style: AppTheme.metaStyle(context),
           ),
           actions: [
             TextButton(
@@ -141,39 +142,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: const Icon(Icons.bookmark_outline, color: AppTheme.accent),
                   title: const Text('My Watchlist'),
-                  subtitle: const Text('Titles you bookmarked', style: AppTheme.metaStyle),
-                  trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+                  subtitle: Text('Titles you bookmarked', style: AppTheme.metaStyle(context)),
+                  trailing: Icon(Icons.chevron_right, color: AppTheme.textSecondaryOf(context)),
                   onTap: () {
                     Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => WatchlistScreen(onSelect: widget.onSelect)),
                     );
                   },
                 ),
-                const Divider(height: 1, color: AppTheme.border),
+                Divider(height: 1, color: AppTheme.borderOf(context)),
                 ListTile(
-                  leading: const Icon(Icons.ios_share, color: AppTheme.textSecondary),
+                  leading: Icon(Icons.ios_share, color: AppTheme.textSecondaryOf(context)),
                   title: const Text('Export Watchlist'),
-                  subtitle: const Text(
+                  subtitle: Text(
                     'Share a watchlist.json to another device (AirDrop, Messages, etc.)',
-                    style: AppTheme.metaStyle,
+                    style: AppTheme.metaStyle(context),
                   ),
                   onTap: () => _exportWatchlist(context),
                 ),
-                const Divider(height: 1, color: AppTheme.border),
+                Divider(height: 1, color: AppTheme.borderOf(context)),
                 ListTile(
-                  leading: const Icon(Icons.file_download_outlined, color: AppTheme.textSecondary),
+                  leading: Icon(Icons.file_download_outlined, color: AppTheme.textSecondaryOf(context)),
                   title: const Text('Import Watchlist'),
-                  subtitle: const Text(
+                  subtitle: Text(
                     'Merges a watchlist.json received from another device into this one',
-                    style: AppTheme.metaStyle,
+                    style: AppTheme.metaStyle(context),
                   ),
                   onTap: () => _importWatchlist(context),
                 ),
-                const Divider(height: 1, color: AppTheme.border),
+                Divider(height: 1, color: AppTheme.borderOf(context)),
                 ListTile(
                   leading: Icon(
                     watchlist.isShared ? Icons.sync : Icons.devices_other_outlined,
-                    color: watchlist.isShared ? AppTheme.accent : AppTheme.textSecondary,
+                    color: watchlist.isShared ? AppTheme.accent : AppTheme.textSecondaryOf(context),
                   ),
                   title: const Text('Shared Watchlist'),
                   subtitle: Text(
@@ -182,9 +183,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ? 'Syncing with your linked devices…'
                             : 'Connected — sync, add a device, or disconnect')
                         : 'Link devices with a four-digit, four-minute code',
-                    style: AppTheme.metaStyle,
+                    style: AppTheme.metaStyle(context),
                   ),
-                  trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+                  trailing: Icon(Icons.chevron_right, color: AppTheme.textSecondaryOf(context)),
                   onTap: () => _showSharedWatchlistOptions(context),
                 ),
               ],
@@ -197,8 +198,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: ListTile(
                 leading: const Icon(Icons.dns_outlined, color: AppTheme.accent),
                 title: const Text('Stream Sources'),
-                subtitle: const Text('Choose primary or backup server', style: AppTheme.metaStyle),
-                trailing: const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+                subtitle: Text('Choose primary or backup server', style: AppTheme.metaStyle(context)),
+                trailing: Icon(Icons.chevron_right, color: AppTheme.textSecondaryOf(context)),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const StreamSourcesScreen()),
                 ),
@@ -210,21 +211,57 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const _SectionLabel('Appearance'),
           _SettingsCard(
             child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const _CardHeader(icon: Icons.contrast, title: 'Theme'),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Dark is ARKTheater\'s original look. Light switches to '
+                    'a clean white theme in the style of Watchly.',
+                    style: AppTheme.metaStyle(context),
+                  ),
+                  const SizedBox(height: 12),
+                  SegmentedButton<ThemeMode>(
+                    segments: const [
+                      ButtonSegment(
+                        value: ThemeMode.dark,
+                        icon: Icon(Icons.dark_mode_outlined),
+                        label: Text('Dark'),
+                      ),
+                      ButtonSegment(
+                        value: ThemeMode.light,
+                        icon: Icon(Icons.light_mode_outlined),
+                        label: Text('Light'),
+                      ),
+                    ],
+                    selected: {settings.themeMode},
+                    onSelectionChanged: settings.isLoaded
+                        ? (modes) => settings.setThemeMode(modes.first)
+                        : null,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          _SettingsCard(
+            child: Padding(
               padding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const _CardHeader(icon: Icons.blur_on, title: 'Liquid Glass Transparency'),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Controls how see-through the nav bar, sheets, and '
                     'player controls are. Left = clearer glass, right = '
                     'more frosted.',
-                    style: AppTheme.metaStyle,
+                    style: AppTheme.metaStyle(context),
                   ),
                   Row(
                     children: [
-                      const Icon(Icons.opacity, size: 16, color: AppTheme.textSecondary),
+                      Icon(Icons.opacity, size: 16, color: AppTheme.textSecondaryOf(context)),
                       Expanded(
                         child: Slider(
                           value: settings.glassOpacityScale,
@@ -237,7 +274,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               : null,
                         ),
                       ),
-                      const Icon(Icons.gradient, size: 18, color: AppTheme.textSecondary),
+                      Icon(Icons.gradient, size: 18, color: AppTheme.textSecondaryOf(context)),
                     ],
                   ),
                 ],
@@ -252,14 +289,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const _CardHeader(icon: Icons.format_size, title: 'Text Size'),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Scales every piece of text in the app. Handy on a TV '
                     'across the room, or to fit more on screen on a tablet.',
-                    style: AppTheme.metaStyle,
+                    style: AppTheme.metaStyle(context),
                   ),
                   Row(
                     children: [
-                      const Text('A', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                      Text('A', style: TextStyle(color: AppTheme.textSecondaryOf(context), fontSize: 12)),
                       Expanded(
                         child: Slider(
                           value: settings.textScale,
@@ -270,7 +307,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           onChanged: settings.isLoaded ? (value) => settings.setTextScale(value) : null,
                         ),
                       ),
-                      const Text('A', style: TextStyle(color: AppTheme.textSecondary, fontSize: 21)),
+                      Text('A', style: TextStyle(color: AppTheme.textSecondaryOf(context), fontSize: 21)),
                     ],
                   ),
                 ],
@@ -288,11 +325,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const _CardHeader(icon: Icons.palette_outlined, title: 'Accent Color'),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Recolors buttons, the slider, selected nav items, and '
                     'the app bar. A few individually-painted highlights '
                     'elsewhere keep the default gold for now.',
-                    style: AppTheme.metaStyle,
+                    style: AppTheme.metaStyle(context),
                   ),
                   const SizedBox(height: 12),
                   _ColorSwatchRow(
@@ -313,10 +350,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const _CardHeader(icon: Icons.play_circle_outline, title: 'Player Controls Color'),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Colors the mobile player timeline, loading indicator, and menus. '
                     'The first swatch follows your app accent. Open a new video after changing it.',
-                    style: AppTheme.metaStyle,
+                    style: AppTheme.metaStyle(context),
                   ),
                   const SizedBox(height: 12),
                   _ColorSwatchRow(
@@ -339,19 +376,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const _CardHeader(icon: Icons.animation, title: 'Scroll Animations'),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Choose how posters, cards, and text enter as they '
                     'scroll into view. You can still turn all motion off.',
-                    style: AppTheme.metaStyle,
+                    style: AppTheme.metaStyle(context),
                   ),
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     dense: true,
                     activeColor: AppTheme.resolvedAccent(context),
                     title: const Text('Reduce motion', style: AppTheme.cardTitleStyle),
-                    subtitle: const Text(
+                    subtitle: Text(
                       'Turns all scroll-in animations off.',
-                      style: AppTheme.metaStyle,
+                      style: AppTheme.metaStyle(context),
                     ),
                     value: settings.reduceMotion,
                     onChanged: settings.isLoaded ? (value) => settings.setReduceMotion(value) : null,
@@ -363,15 +400,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     DropdownButtonFormField<EntranceAnimationStyle>(
                       value: settings.entranceAnimationStyle,
                       isExpanded: true,
-                      dropdownColor: AppTheme.surfaceVariant,
+                      dropdownColor: AppTheme.surfaceVariantOf(context),
                       decoration: InputDecoration(
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         filled: true,
-                        fillColor: AppTheme.surfaceVariant,
+                        fillColor: AppTheme.surfaceVariantOf(context),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: AppTheme.border),
+                          borderSide: BorderSide(color: AppTheme.borderOf(context)),
                         ),
                       ),
                       items: [
@@ -388,7 +425,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           : null,
                     ),
                     const SizedBox(height: 4),
-                    Text(settings.entranceAnimationStyle.description, style: AppTheme.metaStyle),
+                    Text(settings.entranceAnimationStyle.description, style: AppTheme.metaStyle(context)),
                     const SizedBox(height: 14),
                     const Text('Animation sweep color', style: AppTheme.cardTitleStyle),
                     const SizedBox(height: 8),
@@ -413,10 +450,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const _CardHeader(icon: Icons.text_fields, title: 'Text Font & Color'),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Pick a font family and color independently for each '
                     'kind of text in the app.',
-                    style: AppTheme.metaStyle,
+                    style: AppTheme.metaStyle(context),
                   ),
                   const SizedBox(height: 8),
                   for (final category in TextCategory.values)
@@ -437,29 +474,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const _CardHeader(icon: Icons.public, title: 'Watch Region'),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Which country\'s streaming catalog the Platforms tab '
                     'filters by. Same setting as the picker on that screen.',
-                    style: AppTheme.metaStyle,
+                    style: AppTheme.metaStyle(context),
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     value: settings.watchRegion,
                     isExpanded: true,
-                    dropdownColor: AppTheme.surfaceVariant,
-                    style: const TextStyle(
+                    dropdownColor: AppTheme.surfaceVariantOf(context),
+                    style: TextStyle(
                       fontFamily: AppTheme.sansFont,
-                      color: AppTheme.textPrimary,
+                      color: AppTheme.textPrimaryOf(context),
                       fontSize: 13,
                     ),
                     decoration: InputDecoration(
                       isDense: true,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       filled: true,
-                      fillColor: AppTheme.surfaceVariant,
+                      fillColor: AppTheme.surfaceVariantOf(context),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: AppTheme.border),
+                        borderSide: BorderSide(color: AppTheme.borderOf(context)),
                       ),
                     ),
                     items: [
@@ -489,7 +526,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       'resume positions are untouched.',
                   onConfirmed: (context) => context.read<RecentlyWatchedProvider>().clearAll(),
                 ),
-                const Divider(height: 1, color: AppTheme.border),
+                Divider(height: 1, color: AppTheme.borderOf(context)),
                 _DangerTile(
                   icon: Icons.bookmark_remove_outlined,
                   title: 'Clear Watchlist',
@@ -497,7 +534,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   confirmMessage: 'Remove every title from your watchlist? This can\'t be undone.',
                   onConfirmed: (context) => context.read<WatchlistProvider>().clearAll(),
                 ),
-                const Divider(height: 1, color: AppTheme.border),
+                Divider(height: 1, color: AppTheme.borderOf(context)),
                 _DangerTile(
                   icon: Icons.restore,
                   title: 'Clear Resume Positions',
@@ -507,7 +544,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       'in Recently Watched.',
                   onConfirmed: (_) => PlaybackPositionService().clearAll(),
                 ),
-                const Divider(height: 1, color: AppTheme.border),
+                Divider(height: 1, color: AppTheme.borderOf(context)),
                 _DangerTile(
                   icon: Icons.image_not_supported_outlined,
                   title: 'Clear Image Cache',
@@ -520,6 +557,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ..clear()
                       ..clearLiveImages();
                   },
+                ),
+                Divider(height: 1, color: AppTheme.borderOf(context)),
+                _DangerTile(
+                  icon: Icons.hub_outlined,
+                  title: 'Clear Torrent Cache',
+                  subtitle: 'Frees disk space used by streamed and queued torrent data.',
+                  confirmMessage:
+                      'Delete all torrent stream and download cache files? Anything in '
+                      'progress will stop.',
+                  onConfirmed: (_) => TorrentStreamService.clearCache(),
                 ),
               ],
             ),
@@ -535,7 +582,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 children: [
                   const _CardHeader(icon: Icons.info_outline, title: 'ARK Theater'),
                   const SizedBox(height: 8),
-                  Text('Version $_installedVersion', style: AppTheme.metaStyle),
+                  Text('Version $_installedVersion', style: AppTheme.metaStyle(context)),
                   const SizedBox(height: 8),
                   OutlinedButton.icon(
                     onPressed: _checkForUpdate,
@@ -553,11 +600,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     label: const Text('Check provider status'),
                   ),
                   const SizedBox(height: 6),
-                  const Text(
+                  Text(
                     'Title data, artwork, and cast information provided by '
                     'The Movie Database (TMDB). This product uses the TMDB '
                     'API but is not endorsed or certified by TMDB.',
-                    style: AppTheme.metaStyle,
+                    style: AppTheme.metaStyle(context),
                   ),
                 ],
               ),
@@ -593,7 +640,7 @@ Future<void> _showSharedWatchlistOptions(BuildContext context) async {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.link, color: AppTheme.textSecondary),
+              leading: Icon(Icons.link, color: AppTheme.textSecondaryOf(context)),
               title: const Text('Join with a code'),
               subtitle: const Text('Enter a four-digit code from an already linked device'),
               onTap: () async {
@@ -629,7 +676,7 @@ Future<void> _showSharedWatchlistOptions(BuildContext context) async {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.phonelink_setup_outlined, color: AppTheme.textSecondary),
+            leading: Icon(Icons.phonelink_setup_outlined, color: AppTheme.textSecondaryOf(context)),
             title: const Text('Add another device'),
             subtitle: const Text('Creates a one-use code valid for four minutes'),
             onTap: () async {
@@ -638,7 +685,7 @@ Future<void> _showSharedWatchlistOptions(BuildContext context) async {
             },
           ),
           ListTile(
-            leading: const Icon(Icons.link_off, color: AppTheme.textSecondary),
+            leading: Icon(Icons.link_off, color: AppTheme.textSecondaryOf(context)),
             title: const Text('Disconnect this device'),
             subtitle: const Text('Keeps your local titles and the shared library intact'),
             onTap: () async {
@@ -842,11 +889,11 @@ class _SettingsCard extends StatelessWidget {
       colorSweep: false,
       child: Card(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        color: AppTheme.surface,
+        color: AppTheme.surfaceOf(context),
         clipBehavior: Clip.antiAlias,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: AppTheme.border),
+          side: BorderSide(color: AppTheme.borderOf(context)),
         ),
         child: child,
       ),
@@ -893,17 +940,17 @@ class _DangerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(icon, color: AppTheme.textSecondary),
+      leading: Icon(icon, color: AppTheme.textSecondaryOf(context)),
       title: Text(title),
-      subtitle: Text(subtitle, style: AppTheme.metaStyle),
+      subtitle: Text(subtitle, style: AppTheme.metaStyle(context)),
       onTap: () async {
         final messenger = ScaffoldMessenger.of(context);
         final confirmed = await showDialog<bool>(
           context: context,
           builder: (dialogContext) => AlertDialog(
-            backgroundColor: AppTheme.surface,
+            backgroundColor: AppTheme.surfaceOf(context),
             title: Text(title),
-            content: Text(confirmMessage, style: AppTheme.metaStyle),
+            content: Text(confirmMessage, style: AppTheme.metaStyle(context)),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -983,7 +1030,7 @@ class _SwatchDot extends StatelessWidget {
           shape: BoxShape.circle,
           color: color,
           border: Border.all(
-            color: isSelected ? Colors.white : AppTheme.border,
+            color: isSelected ? Colors.white : AppTheme.borderOf(context),
             width: isSelected ? 2.5 : 1,
           ),
         ),
@@ -1015,21 +1062,21 @@ class _FontCategoryTile extends StatelessWidget {
         children: [
           Text(category.label, style: AppTheme.cardTitleStyle),
           const SizedBox(height: 2),
-          Text(category.description, style: AppTheme.metaStyle),
+          Text(category.description, style: AppTheme.metaStyle(context)),
           const SizedBox(height: 8),
           DropdownButtonFormField<String?>(
             value: currentFont?.id,
             isExpanded: true,
-            dropdownColor: AppTheme.surfaceVariant,
-            style: const TextStyle(fontFamily: AppTheme.sansFont, color: AppTheme.textPrimary, fontSize: 13),
+            dropdownColor: AppTheme.surfaceVariantOf(context),
+            style: TextStyle(fontFamily: AppTheme.sansFont, color: AppTheme.textPrimaryOf(context), fontSize: 13),
             decoration: InputDecoration(
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               filled: true,
-              fillColor: AppTheme.surfaceVariant,
+              fillColor: AppTheme.surfaceVariantOf(context),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: AppTheme.border),
+                borderSide: BorderSide(color: AppTheme.borderOf(context)),
               ),
             ),
             items: [
@@ -1045,7 +1092,7 @@ class _FontCategoryTile extends StatelessWidget {
           const SizedBox(height: 10),
           _ColorSwatchRow(
             selected: currentColor,
-            defaultColor: AppTheme.textPrimary,
+            defaultColor: AppTheme.textPrimaryOf(context),
             onSelect: (color) => settings.setColorForCategory(category, color),
           ),
         ],
@@ -1064,7 +1111,7 @@ class _SectionLabel extends StatelessWidget {
     return FadeInOnScroll(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 6),
-        child: Text(text.toUpperCase(), style: AppTheme.metaStyle.copyWith(letterSpacing: 1.0)),
+        child: Text(text.toUpperCase(), style: AppTheme.metaStyle(context).copyWith(letterSpacing: 1.0)),
       ),
     );
   }

@@ -91,13 +91,13 @@ class _HeroBannerState extends State<HeroBanner> {
               if (backdrop != null)
                 CachedNetworkImage(imageUrl: backdrop, fit: BoxFit.cover)
               else
-                Container(color: AppTheme.surfaceVariant),
+                Container(color: AppTheme.surfaceVariantOf(context)),
               DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, AppTheme.background.withOpacity(0.95)],
+                    colors: [Colors.transparent, AppTheme.backgroundOf(context).withOpacity(0.95)],
                     stops: const [0.35, 1.0],
                   ),
                 ),

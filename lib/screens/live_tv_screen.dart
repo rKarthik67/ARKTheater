@@ -87,7 +87,7 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-            child: Align(alignment: Alignment.centerLeft, child: Text('${visible.length} free channels · availability varies by country', style: const TextStyle(color: AppTheme.textSecondary))),
+            child: Align(alignment: Alignment.centerLeft, child: Text('${visible.length} free channels · availability varies by country', style: TextStyle(color: AppTheme.textSecondaryOf(context)))),
           ),
           Expanded(child: GridView.builder(
             padding: EdgeInsets.fromLTRB(16, 14, 16, 16 + Responsive.bottomNavInset(context)),
@@ -100,11 +100,11 @@ class _LiveTvScreenState extends State<LiveTvScreen> {
                 onTap: () => _play(channel),
                 child: Ink(
                   padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(color: AppTheme.surfaceVariant, borderRadius: BorderRadius.circular(14)),
+                  decoration: BoxDecoration(color: AppTheme.surfaceVariantOf(context), borderRadius: BorderRadius.circular(14)),
                   child: Row(children: [
-                    ClipRRect(borderRadius: BorderRadius.circular(8), child: channel.logo == null ? Container(width: 44, height: 44, color: AppTheme.surface, alignment: Alignment.center, child: const Icon(Icons.live_tv_outlined)) : Image.network(channel.logo!, width: 44, height: 44, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox(width: 44, height: 44))),
+                    ClipRRect(borderRadius: BorderRadius.circular(8), child: channel.logo == null ? Container(width: 44, height: 44, color: AppTheme.surfaceOf(context), alignment: Alignment.center, child: Icon(Icons.live_tv_outlined)) : Image.network(channel.logo!, width: 44, height: 44, fit: BoxFit.contain, errorBuilder: (_, __, ___) => SizedBox(width: 44, height: 44))),
                     const SizedBox(width: 10),
-                    Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [Text(channel.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)), const SizedBox(height: 3), Text('${channel.country} · ${channel.language}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)), Text(channel.category, style: TextStyle(fontSize: 12, color: AppTheme.resolvedAccent(context)))])),
+                    Expanded(child: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, children: [Text(channel.name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.w700)), SizedBox(height: 3), Text('${channel.country} · ${channel.language}', maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: AppTheme.textSecondaryOf(context))), Text(channel.category, style: TextStyle(fontSize: 12, color: AppTheme.resolvedAccent(context)))])),
                   ]),
                 ),
               );
