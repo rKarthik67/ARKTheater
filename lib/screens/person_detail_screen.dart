@@ -145,9 +145,9 @@ class _PersonDetailScreenState extends State<PersonDetailScreen>
                   delegate: _TabBarHeaderDelegate(
                     TabBar(
                       controller: _tabController,
-                      labelColor: AppTheme.accent,
+                      labelColor: AppTheme.resolvedAccent(context),
                       unselectedLabelColor: AppTheme.textSecondaryOf(context),
-                      indicatorColor: AppTheme.accent,
+                      indicatorColor: AppTheme.resolvedAccent(context),
                       tabs: [
                         Tab(text: 'Movies (${movies.length})'),
                         Tab(text: 'TV Shows (${tvShows.length})'),

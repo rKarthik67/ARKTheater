@@ -173,7 +173,7 @@ class FlutterLogoOrBrand extends StatelessWidget {
       height: 36,
       fit: BoxFit.contain,
       errorBuilder: (context, error, stackTrace) =>
-          const Icon(Icons.local_movies, color: AppTheme.accent, size: 32),
+          Icon(Icons.local_movies, color: AppTheme.resolvedAccent(context), size: 32),
     );
   }
 }

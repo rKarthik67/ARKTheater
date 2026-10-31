@@ -1,4 +1,5 @@
 PODS:
+  - ArkTorrentNative (1.0.0)
   - better_player_plus (1.0.0):
     - Cache (~> 6.0.0)
     - Flutter
@@ -39,6 +40,7 @@ PODS:
     - Flutter
 
 DEPENDENCIES:
+  - ArkTorrentNative (from `../native/ArkTorrentKit`)
   - better_player_plus (from `.symlinks/plugins/better_player_plus/ios`)
   - Flutter (from `Flutter`)
   - flutter_inappwebview_ios (from `.symlinks/plugins/flutter_inappwebview_ios/ios`)
@@ -57,6 +59,8 @@ SPEC REPOS:
     - PINOperation
 
 EXTERNAL SOURCES:
+  ArkTorrentNative:
+    :path: "../native/ArkTorrentKit"
   better_player_plus:
     :path: ".symlinks/plugins/better_player_plus/ios"
   Flutter:
@@ -73,6 +77,7 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/share_plus/ios"
 
 SPEC CHECKSUMS:
+  ArkTorrentNative: 847adabf840423984ea897a2500b96f1943a7737
   better_player_plus: 10794c0ed1b3b4ae058939e22a6172f850a2039b
   Cache: 4ca7e00363fca5455f26534e5607634c820ffc2d
   Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
@@ -87,6 +92,6 @@ SPEC CHECKSUMS:
   PINOperation: fb563bcc9c32c26d6c78aaff967d405aa2ee74a7
   share_plus: de6030e33b4e106470e09322d87cf2a4258d2d1d
 
-PODFILE CHECKSUM: 3ba3a73b1b12adcf321a227a745625fe0888cc82
+PODFILE CHECKSUM: 14c6ecf03577f49e453b60da1dadd0609c4c8050
 
 COCOAPODS: 1.17.0

@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../core/responsive.dart';
 import '../models/media_detail.dart';
 import '../models/media_item.dart';
 import '../services/tmdb_service.dart';
@@ -142,109 +143,163 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final episode = widget.episode;
-    final stillUrl = episode.stillUrl(size: 'w780');
+    final stillUrl = episode.stillUrl(size: 'original');
+    final isDesktop = Responsive.isDesktop(context);
     return Scaffold(
-      appBar:
-          AppBar(title: Text('S${widget.season} E${episode.episodeNumber}')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          if (stillUrl != null)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: CachedNetworkImage(
-                imageUrl: stillUrl,
-                height: 180,
-                width: double.infinity,
-                fit: BoxFit.cover,
-              ),
-            ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: widget.onScraper,
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Play'),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => setState(() => _showTorrent = !_showTorrent),
-                  icon: const Icon(Icons.hub_outlined),
-                  label: const Text('Torrent'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Text(episode.name, style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 8),
-          Text(episode.overview ?? 'No episode description is available.'),
-          const SizedBox(height: 16),
-          ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.open_in_browser),
-              title: const Text('Embedded player'),
-              subtitle: const Text('Open an embed source'),
-              onTap: widget.onEmbed),
-          if (_showTorrent)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: _resolving
-                  ? Row(
-                      children: [
-                        const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(_resolvingStatus ??
-                              'Connecting to torrent peers...'),
-                        ),
-                      ],
-                    )
-                  : TorrentSourceList(
-                      mediaType: MediaType.tv,
-                      tmdbId: widget.item.id,
-                      season: widget.season,
-                      episode: episode.episodeNumber,
-                      onPlay: _playTorrent,
+      body: CustomScrollView(
+        slivers: [
+          SliverAppBar(
+            expandedHeight: isDesktop ? 420 : 260,
+            pinned: true,
+            automaticallyImplyLeading: false,
+            flexibleSpace: FlexibleSpaceBar(
+              background: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (stillUrl != null)
+                    CachedNetworkImage(imageUrl: stillUrl, fit: BoxFit.cover)
+                  else
+                    Container(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                      child: const Icon(Icons.image_not_supported_outlined,
+                          size: 48),
                     ),
+                  Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Theme.of(context).scaffoldBackgroundColor,
+                        ],
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    top: MediaQuery.paddingOf(context).top + 8,
+                    left: 8,
+                    child: IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      tooltip: 'Back',
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.black45,
+                        foregroundColor: Colors.white,
+                      ),
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          const SizedBox(height: 20),
-          Text('Episode cast', style: Theme.of(context).textTheme.titleLarge),
-          FutureBuilder<List<CastMember>>(
-            future: TmdbService().episodeCast(
-                widget.item.id, widget.season, episode.episodeNumber),
-            builder: (_, snapshot) {
-              if (!snapshot.hasData)
-                return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: CircularProgressIndicator());
-              return Wrap(spacing: 12, runSpacing: 12, children: [
-                for (final cast in snapshot.data!)
-                  SizedBox(
-                      width: 82,
-                      child: Column(children: [
-                        CircleAvatar(
-                            radius: 30,
-                            backgroundImage: cast.profilePath == null
-                                ? null
-                                : CachedNetworkImageProvider(
-                                    'https://image.tmdb.org/t/p/w185${cast.profilePath}')),
-                        const SizedBox(height: 4),
-                        Text(cast.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            textAlign: TextAlign.center),
-                      ])),
-              ]);
-            },
+          ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('S${widget.season} · E${episode.episodeNumber}',
+                      style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 4),
+                  Text(
+                    episode.name.isNotEmpty
+                        ? episode.name
+                        : 'Episode ${episode.episodeNumber}',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: widget.onScraper,
+                          icon: const Icon(Icons.play_arrow),
+                          label: const Text('Play'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () =>
+                              setState(() => _showTorrent = !_showTorrent),
+                          icon: const Icon(Icons.hub_outlined),
+                          label: const Text('Torrent'),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(episode.overview ?? 'No episode description is available.'),
+                  const SizedBox(height: 16),
+                  ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.open_in_browser),
+                      title: const Text('Embedded player'),
+                      subtitle: const Text('Open an embed source'),
+                      onTap: widget.onEmbed),
+                  if (_showTorrent)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _resolving
+                          ? Row(
+                              children: [
+                                const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(_resolvingStatus ??
+                                      'Connecting to torrent peers...'),
+                                ),
+                              ],
+                            )
+                          : TorrentSourceList(
+                              mediaType: MediaType.tv,
+                              tmdbId: widget.item.id,
+                              season: widget.season,
+                              episode: episode.episodeNumber,
+                              onPlay: _playTorrent,
+                            ),
+                    ),
+                  const SizedBox(height: 20),
+                  Text('Episode cast',
+                      style: Theme.of(context).textTheme.titleLarge),
+                  const SizedBox(height: 8),
+                  FutureBuilder<List<CastMember>>(
+                    future: TmdbService().episodeCast(
+                        widget.item.id, widget.season, episode.episodeNumber),
+                    builder: (_, snapshot) {
+                      if (!snapshot.hasData)
+                        return const Padding(
+                            padding: EdgeInsets.all(16),
+                            child: CircularProgressIndicator());
+                      return Wrap(spacing: 12, runSpacing: 12, children: [
+                        for (final cast in snapshot.data!)
+                          SizedBox(
+                              width: 82,
+                              child: Column(children: [
+                                CircleAvatar(
+                                    radius: 30,
+                                    backgroundImage: cast.profilePath == null
+                                        ? null
+                                        : CachedNetworkImageProvider(
+                                            'https://image.tmdb.org/t/p/w185${cast.profilePath}')),
+                                const SizedBox(height: 4),
+                                Text(cast.name,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    textAlign: TextAlign.center),
+                              ])),
+                      ]);
+                    },
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

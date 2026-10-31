@@ -76,7 +76,7 @@ class MediaCard extends StatelessWidget {
                   right: 6,
                   child: _PosterIconButton(
                     icon: isBookmarked ? Icons.bookmark : Icons.bookmark_border,
-                    color: isBookmarked ? AppTheme.accent : Colors.white,
+                    color: isBookmarked ? AppTheme.resolvedAccent(context) : Colors.white,
                     onTap: () => context.read<WatchlistProvider>().toggle(item),
                   ),
                 ),
@@ -99,7 +99,7 @@ class MediaCard extends StatelessWidget {
                         duration: const Duration(milliseconds: 380),
                         curve: Curves.easeOutCubic,
                         widthFactor: progress!.clamp(0.0, 1.0),
-                        child: Container(color: AppTheme.accent),
+                        child: Container(color: AppTheme.resolvedAccent(context)),
                       ),
                     ),
                   ),

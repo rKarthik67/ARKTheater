@@ -346,6 +346,14 @@ class AppTheme {
       TextCategory.navigation,
     );
     final glow = accentColor.withOpacity(0.22);
+    // goldText (a warm near-black) reads fine on every gold/pastel/bright
+    // accent, but an accent that's itself dark (e.g. the "jet black" swatch)
+    // would otherwise produce near-black text on a near-black button.
+    // Picking the on-accent text color by the accent's own estimated
+    // brightness keeps every accent choice legible.
+    final onAccent = ThemeData.estimateBrightnessForColor(accentColor) == Brightness.dark
+        ? basePrimaryText
+        : goldText;
 
     return base.copyWith(
       scaffoldBackgroundColor: themedBackground,
@@ -369,7 +377,7 @@ class AppTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: accentColor,
-          foregroundColor: goldText,
+          foregroundColor: onAccent,
           textStyle: buttonTextStyle,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(999)),

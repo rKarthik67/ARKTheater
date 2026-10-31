@@ -263,11 +263,23 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
     return hours > 0 ? '$hours:$mm:$ss' : '$mm:$ss';
   }
 
+  /// Settings > Player Controls Color if set, else the app's own accent
+  /// color - used for every player-chrome highlight (timeline, loading
+  /// indicator, selection menus) so none of them get stuck on the default
+  /// gold once either is customized. Deliberately uses `.read`, not
+  /// `.watch` (matching this method's own pre-existing use from
+  /// _setupController, which runs outside build() and would throw on
+  /// watch) - sheets built from this read the current value when they
+  /// open rather than live-updating while already open, same tradeoff the
+  /// rest of this screen already accepted.
+  Color _playerAccent(BuildContext context) {
+    final settings = context.read<SettingsProvider>();
+    return settings.playerAccentColor ?? settings.accentColor ?? AppTheme.accent;
+  }
+
   void _setupController(
       {Duration? resumeAt, bool preserveActiveSubtitle = false}) {
-    final settings = context.read<SettingsProvider>();
-    final playerAccent =
-        settings.playerAccentColor ?? settings.accentColor ?? AppTheme.accent;
+    final playerAccent = _playerAccent(context);
     _controller = BetterPlayerController(
       BetterPlayerConfiguration(
         autoPlay: true,
@@ -656,7 +668,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                             ? Icons.radio_button_checked
                             : Icons.radio_button_off,
                         color: i == _providerIndex
-                            ? AppTheme.accent
+                            ? _playerAccent(context)
                             : Colors.white54,
                       ),
                       title: Text(widget.providers[i].displayName,
@@ -719,7 +731,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                         : Icons.radio_button_off,
                     color:
                         current != null && audioLabelForLink(current) == label
-                            ? AppTheme.accent
+                            ? _playerAccent(context)
                             : Colors.white54,
                   ),
                   title:
@@ -1038,11 +1050,11 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                       ],
                       const SizedBox(height: 8),
                       if (_loadingExternalSubtitles)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 20),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
                           child: Center(
                               child: CircularProgressIndicator(
-                                  color: AppTheme.accent)),
+                                  color: _playerAccent(context))),
                         )
                       else if (_externalSubtitlesError != null)
                         Padding(
@@ -1086,7 +1098,7 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                                 tileColor: isLastDownloaded
                                     ? Colors.yellow.withOpacity(0.22)
                                     : isDownloaded
-                                        ? AppTheme.accent.withOpacity(0.18)
+                                        ? _playerAccent(context).withOpacity(0.18)
                                         : null,
                                 shape: highlighted
                                     ? RoundedRectangleBorder(
@@ -1123,8 +1135,8 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                                     ? const Icon(Icons.history,
                                         color: Colors.yellow, size: 18)
                                     : isDownloaded
-                                        ? const Icon(Icons.check_circle,
-                                            color: AppTheme.accent, size: 18)
+                                        ? Icon(Icons.check_circle,
+                                            color: _playerAccent(context), size: 18)
                                         : null,
                                 onTap: () {
                                   unawaited(_applyExternalSubtitle(sub));
@@ -1252,8 +1264,8 @@ class _MobilePlayerScreenState extends State<MobilePlayerScreen> {
                 ),
               ),
             if (_loading || _switchingProvider)
-              const Center(
-                  child: CircularProgressIndicator(color: AppTheme.accent)),
+              Center(
+                  child: CircularProgressIndicator(color: _playerAccent(context))),
             if (_showFrozenHint && !_loading)
               Positioned(
                 left: 24,

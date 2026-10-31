@@ -118,14 +118,21 @@ const List<Color> kAppColorSwatches = [
   Color(0xFFFFFFFF), // pure white
   Color(0xFFB0B4C0), // cool gray
   Color(0xFF8A8F9C), // slate gray
+  Color(0xFF000000), // jet black
 
-  // Golds / warm metals
+  // Golds / warm metals - gold-1/2/3/4 mirror ark-theater-play-web's own
+  // --gold-1..4 gradient shades (css/styles.css), so the app's accent
+  // picker offers the same warm-gold range the reference web app's
+  // buttons/highlights use.
   Color(0xFFE0A83A), // app default accent (metallic gold)
+  Color(0xFFFFD27A), // gold-1 (lightest, ark-theater-play-web)
   Color(0xFFF6D68A), // warm champagne
   Color(0xFFD4AF37), // classic gold
   Color(0xFFE8C4A0), // soft copper
   Color(0xFFCD7F32), // bronze
-  Color(0xFFFFB347), // amber
+  Color(0xFFFFB347), // gold-2 / amber (ark-theater-play-web)
+  Color(0xFFE8891A), // gold-3 (ark-theater-play-web)
+  Color(0xFF8A4A12), // gold-4 (deepest, ark-theater-play-web)
 
   // Reds / pinks
   Color(0xFFEF6B5A), // coral red

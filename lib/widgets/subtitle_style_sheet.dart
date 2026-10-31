@@ -105,7 +105,7 @@ Future<void> showSubtitleStyleSheet({
                         min: 12,
                         max: 40,
                         divisions: 28,
-                        activeColor: AppTheme.accent,
+                        activeColor: AppTheme.resolvedAccent(sheetContext),
                         label: draft.fontSize.round().toString(),
                         onChanged: (value) => update(draft.copyWith(fontSize: value)),
                       ),
@@ -160,7 +160,7 @@ Future<void> showSubtitleStyleSheet({
                     ),
                     const Spacer(),
                     FilledButton(
-                      style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
+                      style: FilledButton.styleFrom(backgroundColor: AppTheme.resolvedAccent(sheetContext)),
                       onPressed: () {
                         onChanged(draft);
                         Navigator.of(sheetContext).pop();
@@ -198,7 +198,7 @@ class _ColorSwatch extends StatelessWidget {
           color: color,
           shape: BoxShape.circle,
           border: Border.all(
-            color: selected ? AppTheme.accent : Colors.white24,
+            color: selected ? AppTheme.resolvedAccent(context) : Colors.white24,
             width: selected ? 3 : 1,
           ),
         ),
@@ -239,7 +239,7 @@ class _BackgroundSwatch extends StatelessWidget {
         decoration: BoxDecoration(
           color: color == Colors.transparent ? const Color(0xFF211A38) : color,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: selected ? AppTheme.accent : Colors.white24, width: selected ? 2 : 1),
+          border: Border.all(color: selected ? AppTheme.resolvedAccent(context) : Colors.white24, width: selected ? 2 : 1),
         ),
         child: Text(
           label,

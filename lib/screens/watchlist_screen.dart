@@ -87,7 +87,7 @@ class _WatchlistScreenState extends State<WatchlistScreen> {
                             (states) => states.contains(WidgetState.selected) ? Colors.white : AppTheme.textSecondaryOf(context),
                           ),
                           backgroundColor: WidgetStateProperty.resolveWith(
-                            (states) => states.contains(WidgetState.selected) ? AppTheme.accent : AppTheme.surfaceVariantOf(context),
+                            (states) => states.contains(WidgetState.selected) ? AppTheme.resolvedAccent(context) : AppTheme.surfaceVariantOf(context),
                           ),
                         ),
                       ),

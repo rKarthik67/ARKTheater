@@ -129,10 +129,6 @@ class _HeroBannerState extends State<HeroBanner> {
                       children: [
                         ElevatedButton.icon(
                           onPressed: () => widget.onWatchNow(item),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.accent,
-                            foregroundColor: AppTheme.goldText,
-                          ),
                           icon: const Icon(Icons.play_arrow),
                           label: const Text('Watch Now'),
                         ),

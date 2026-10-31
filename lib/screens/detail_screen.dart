@@ -507,8 +507,8 @@ class _DetailScreenState extends State<DetailScreen> {
                                 ),
                               if (providers.isNotEmpty) ...[
                                 ListTile(
-                                  leading: const Icon(Icons.auto_awesome,
-                                      color: AppTheme.accent),
+                                  leading: Icon(Icons.auto_awesome,
+                                      color: AppTheme.resolvedAccent(context)),
                                   title: const Text('Auto'),
                                   subtitle: Text(
                                     healthSnapshot.data == null
@@ -694,7 +694,10 @@ class _DetailScreenState extends State<DetailScreen> {
                 actions: [
                   IconButton(
                     icon: Icon(
-                        isBookmarked ? Icons.bookmark : Icons.bookmark_border),
+                        isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                        color: isBookmarked
+                            ? AppTheme.resolvedAccent(context)
+                            : null),
                     onPressed: () => watchlist.toggle(detail.item),
                   ),
                 ],
@@ -928,16 +931,24 @@ class _Chip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final accentColor = AppTheme.resolvedAccent(context);
+    // badgeStyle's fixed goldText reads fine on every gold/pastel/bright
+    // accent, but would be illegible on a dark accent choice (e.g. "jet
+    // black") - pick on-accent text by the accent's own brightness instead,
+    // mirroring themeFor()'s onAccent button-text logic.
+    final onAccent = ThemeData.estimateBrightnessForColor(accentColor) == Brightness.dark
+        ? AppTheme.textPrimaryOf(context)
+        : AppTheme.goldText;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: accent ? AppTheme.accent : AppTheme.surfaceVariantOf(context),
+        color: accent ? accentColor : AppTheme.surfaceVariantOf(context),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         label,
         style: accent
-            ? AppTheme.badgeStyle
+            ? AppTheme.badgeStyle.copyWith(color: onAccent)
             : AppTheme.resolvedStyle(
                 context, AppTheme.metaStyle(context), TextCategory.info),
       ),
@@ -1004,11 +1015,11 @@ class _SeasonEpisodePicker extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 14,
                   height: 14,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppTheme.accent),
+                      strokeWidth: 2, color: AppTheme.resolvedAccent(context)),
                 ),
                 const SizedBox(width: 8),
                 Text(resolvingStatus!,
@@ -1018,10 +1029,10 @@ class _SeasonEpisodePicker extends StatelessWidget {
             ),
           ),
         if (loadingEpisodes)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
             child: Center(
-                child: CircularProgressIndicator(color: AppTheme.accent)),
+                child: CircularProgressIndicator(color: AppTheme.resolvedAccent(context))),
           )
         else
           Column(
@@ -1071,7 +1082,7 @@ class _SeasonCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: selected ? AppTheme.accent : Colors.transparent,
+                    color: selected ? AppTheme.resolvedAccent(context) : Colors.transparent,
                     width: 2,
                   ),
                   color: AppTheme.surfaceVariantOf(context),
@@ -1088,7 +1099,7 @@ class _SeasonCard extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 12,
-                color: selected ? AppTheme.accent : AppTheme.textPrimaryOf(context),
+                color: selected ? AppTheme.resolvedAccent(context) : AppTheme.textPrimaryOf(context),
                 fontWeight: selected ? FontWeight.bold : FontWeight.normal,
               ),
             ),

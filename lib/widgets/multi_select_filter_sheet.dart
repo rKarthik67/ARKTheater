@@ -128,7 +128,7 @@ class _MultiSelectFilterSheetState extends State<_MultiSelectFilterSheet> {
                             label: Text(g.name),
                             selected: _genreIds.contains(g.id),
                             onSelected: (_) => _toggleGenre(g.id),
-                            selectedColor: AppTheme.accent,
+                            selectedColor: AppTheme.resolvedAccent(context),
                             checkmarkColor: Colors.white,
                             backgroundColor: AppTheme.surfaceVariantOf(context),
                             labelStyle: TextStyle(
@@ -152,7 +152,7 @@ class _MultiSelectFilterSheetState extends State<_MultiSelectFilterSheet> {
                             label: Text('$y'),
                             selected: _years.contains(y),
                             onSelected: (_) => _toggleYear(y),
-                            selectedColor: AppTheme.accent,
+                            selectedColor: AppTheme.resolvedAccent(context),
                             checkmarkColor: Colors.white,
                             backgroundColor: AppTheme.surfaceVariantOf(context),
                             labelStyle: TextStyle(
@@ -220,7 +220,7 @@ class FilterSheetButton extends StatelessWidget {
         ),
         label: Text(active ? 'Filters ($activeCount)' : 'Filters'),
         onPressed: onTap,
-        backgroundColor: active ? AppTheme.accent : AppTheme.surfaceVariantOf(context),
+        backgroundColor: active ? AppTheme.resolvedAccent(context) : AppTheme.surfaceVariantOf(context),
         labelStyle: TextStyle(
           color: active ? Colors.white : AppTheme.textPrimaryOf(context),
           fontSize: 12,

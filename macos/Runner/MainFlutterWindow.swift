@@ -1,3 +1,4 @@
+import ArkTorrentKit
 import Cocoa
 import FlutterMacOS
 
@@ -9,6 +10,7 @@ class MainFlutterWindow: NSWindow {
     self.setFrame(windowFrame, display: true)
 
     RegisterGeneratedPlugins(registry: flutterViewController)
+    ArkTorrentChannel.register(messenger: flutterViewController.engine.binaryMessenger)
 
     super.awakeFromNib()
   }

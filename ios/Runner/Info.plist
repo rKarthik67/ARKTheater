@@ -24,6 +24,13 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<!-- "Play in VLC" (torrent sources) checks whether VLC for iOS is
+		     installed via its vlc:// URL scheme before handing off a stream -
+		     see ARKExternalPlayer.playInVlc. -->
+		<string>vlc</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<!-- libmpv (media_kit) opens the resolved provider URLs directly. Some

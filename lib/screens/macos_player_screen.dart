@@ -18,6 +18,7 @@ import '../services/airplay_service.dart';
 import 'package:provider/provider.dart';
 
 import '../state/recently_watched_provider.dart';
+import '../state/settings_provider.dart';
 import '../services/subtitle_download_history_service.dart';
 import '../services/subtitle_style_service.dart';
 import '../video_providers/common.dart';
@@ -142,6 +143,16 @@ String? _lookupSubtitleText(List<_SubtitleCue> cues, Duration position) {
 class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
   final _playbackPosition = PlaybackPositionService();
   final _subtitleDownloadHistory = SubtitleDownloadHistoryService();
+
+  /// Settings > Player Controls Color if set, else the app's own accent
+  /// color - used for every player-chrome highlight (loading indicator,
+  /// selection menus, slider) so none of them get stuck on the default
+  /// gold once either is customized. Uses `.read`, not `.watch`, so it's
+  /// safe to call from both build() and imperative setup code.
+  Color _playerAccent(BuildContext context) {
+    final settings = context.read<SettingsProvider>();
+    return settings.playerAccentColor ?? settings.accentColor ?? AppTheme.accent;
+  }
 
   VideoPlayerController? _controller;
 
@@ -778,9 +789,9 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                       ],
                     ),
                     if (_loadingExternalSubtitles)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20),
-                        child: Center(child: CircularProgressIndicator(color: AppTheme.accent)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: Center(child: CircularProgressIndicator(color: _playerAccent(context))),
                       )
                     else if (_externalSubtitlesError != null || _externalSubtitles.isEmpty)
                       Padding(
@@ -828,7 +839,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                               tileColor: isLastDownloaded
                                   ? Colors.yellow.withOpacity(0.22)
                                   : isDownloaded
-                                      ? AppTheme.accent.withOpacity(0.18)
+                                      ? _playerAccent(context).withOpacity(0.18)
                                       : null,
                               shape: highlighted
                                   ? RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
@@ -853,7 +864,7 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                               trailing: isLastDownloaded
                                   ? const Icon(Icons.history, color: Colors.yellow, size: 18)
                                   : isDownloaded
-                                      ? const Icon(Icons.check_circle, color: AppTheme.accent, size: 18)
+                                      ? Icon(Icons.check_circle, color: _playerAccent(context), size: 18)
                                       : null,
                               onTap: () {
                                 unawaited(_subtitleDownloadHistory.markDownloaded(
@@ -1031,9 +1042,9 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (s == _speed)
-                          const Padding(
-                            padding: EdgeInsets.only(right: 8),
-                            child: Icon(Icons.check, size: 16, color: AppTheme.accent),
+                          Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: Icon(Icons.check, size: 16, color: _playerAccent(context)),
                           ),
                         Text('${s}x'),
                       ],
@@ -1054,9 +1065,9 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (link.url == _currentLink.url)
-                            const Padding(
-                              padding: EdgeInsets.only(right: 8),
-                              child: Icon(Icons.check, size: 16, color: AppTheme.accent),
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Icon(Icons.check, size: 16, color: _playerAccent(context)),
                             ),
                           Text(link.quality ?? 'unknown quality'),
                         ],
@@ -1077,9 +1088,9 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (audioLabelForLink(_currentLink) == label)
-                            const Padding(
-                              padding: EdgeInsets.only(right: 8),
-                              child: Icon(Icons.check, size: 16, color: AppTheme.accent),
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Icon(Icons.check, size: 16, color: _playerAccent(context)),
                             ),
                           Text(label),
                         ],
@@ -1109,9 +1120,9 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (i == _providerIndex)
-                            const Padding(
-                              padding: EdgeInsets.only(right: 8),
-                              child: Icon(Icons.check, size: 16, color: AppTheme.accent),
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: Icon(Icons.check, size: 16, color: _playerAccent(context)),
                             ),
                           Text(widget.providers[i].displayName),
                         ],
@@ -1228,9 +1239,9 @@ class _MacosPlayerScreenState extends State<MacosPlayerScreen> {
                                 trackHeight: 3,
                                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
                                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
-                                activeTrackColor: AppTheme.accent,
+                                activeTrackColor: _playerAccent(context),
                                 inactiveTrackColor: Colors.white24,
-                                thumbColor: AppTheme.accent,
+                                thumbColor: _playerAccent(context),
                               ),
                               child: Slider(
                                 min: 0,
@@ -1385,7 +1396,7 @@ class _MessageCard extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: AppTheme.accent, size: 40),
+          Icon(icon, color: AppTheme.resolvedAccent(context), size: 40),
           const SizedBox(height: 12),
           Text(message, style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
           const SizedBox(height: 16),

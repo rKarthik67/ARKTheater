@@ -694,7 +694,7 @@ class _TVResultsState extends State<_TVResults> {
                   selected: f == widget.seasonFilter,
                   onSelected: (_) => widget.onSeasonFilterChanged(f),
                   showCheckmark: false,
-                  selectedColor: AppTheme.accent,
+                  selectedColor: AppTheme.resolvedAccent(context),
                   backgroundColor: AppTheme.surfaceVariantOf(context),
                   labelStyle: TextStyle(
                     color: f == widget.seasonFilter ? Colors.white : AppTheme.textPrimaryOf(context),

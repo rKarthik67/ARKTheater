@@ -1,3 +1,4 @@
+import ArkTorrentKit
 import Flutter
 import UIKit
 import AVFoundation
@@ -14,6 +15,7 @@ import AVKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    ArkTorrentChannel.register(messenger: engineBridge.applicationRegistrar.messenger())
     let channel = FlutterMethodChannel(
       name: "ark_theater/display",
       binaryMessenger: engineBridge.applicationRegistrar.messenger()

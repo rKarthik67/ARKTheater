@@ -68,7 +68,7 @@ class MediaRow extends StatelessWidget {
                   TextButton(
                     onPressed: onViewMore,
                     style: TextButton.styleFrom(
-                      foregroundColor: AppTheme.accent,
+                      foregroundColor: AppTheme.resolvedAccent(context),
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,

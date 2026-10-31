@@ -172,7 +172,7 @@ class _PagedMediaGridState extends State<PagedMediaGrid> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
               child: Center(
                 child: _loadingMore
-                    ? const CircularProgressIndicator(color: AppTheme.accent)
+                    ? CircularProgressIndicator(color: AppTheme.resolvedAccent(context))
                     : _moreError != null
                         ? Column(
                             mainAxisSize: MainAxisSize.min,

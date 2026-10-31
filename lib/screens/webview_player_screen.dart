@@ -135,9 +135,9 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (i == _providerIndex)
-                        const Padding(
-                          padding: EdgeInsets.only(right: 8),
-                          child: Icon(Icons.check, size: 16, color: AppTheme.accent),
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: Icon(Icons.check, size: 16, color: AppTheme.resolvedAccent(context)),
                         ),
                       Text(embedProviders[i].name),
                     ],
@@ -208,7 +208,7 @@ class _WebViewPlayerScreenState extends State<WebViewPlayerScreen> {
               return NavigationActionPolicy.ALLOW;
             },
           ),
-          if (_loading) const Center(child: CircularProgressIndicator(color: AppTheme.accent)),
+          if (_loading) Center(child: CircularProgressIndicator(color: AppTheme.resolvedAccent(context))),
         ],
       ),
     );

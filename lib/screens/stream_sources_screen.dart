@@ -210,7 +210,7 @@ class _SourceOption extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
         color: selected
-            ? AppTheme.accent.withOpacity(0.14)
+            ? AppTheme.resolvedAccent(context).withOpacity(0.14)
             : AppTheme.surfaceVariantOf(context),
         child: RadioListTile<bool>(
           value: true,

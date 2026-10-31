@@ -12,6 +12,12 @@
 .swiftpm/
 migrate_working_dir/
 
+# Vendored libtorrent/Boost build output for native/ArkTorrentKit - large,
+# platform-specific, and reproducible via native/ArkTorrentKit/scripts/ -
+# same "regenerate on your machine instead of committing" rule the top-level
+# README already applies to android/, ios/, macos/, windows/, linux/.
+native/ArkTorrentKit/Vendor/
+
 # IntelliJ related
 *.iml
 *.ipr

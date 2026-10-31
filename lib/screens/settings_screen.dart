@@ -140,7 +140,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Column(
               children: [
                 ListTile(
-                  leading: const Icon(Icons.bookmark_outline, color: AppTheme.accent),
+                  leading: Icon(Icons.bookmark_outline, color: AppTheme.resolvedAccent(context)),
                   title: const Text('My Watchlist'),
                   subtitle: Text('Titles you bookmarked', style: AppTheme.metaStyle(context)),
                   trailing: Icon(Icons.chevron_right, color: AppTheme.textSecondaryOf(context)),
@@ -174,7 +174,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ListTile(
                   leading: Icon(
                     watchlist.isShared ? Icons.sync : Icons.devices_other_outlined,
-                    color: watchlist.isShared ? AppTheme.accent : AppTheme.textSecondaryOf(context),
+                    color: watchlist.isShared ? AppTheme.resolvedAccent(context) : AppTheme.textSecondaryOf(context),
                   ),
                   title: const Text('Shared Watchlist'),
                   subtitle: Text(
@@ -196,7 +196,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             const _SectionLabel('Stream Sources'),
             _SettingsCard(
               child: ListTile(
-                leading: const Icon(Icons.dns_outlined, color: AppTheme.accent),
+                leading: Icon(Icons.dns_outlined, color: AppTheme.resolvedAccent(context)),
                 title: const Text('Stream Sources'),
                 subtitle: Text('Choose primary or backup server', style: AppTheme.metaStyle(context)),
                 trailing: Icon(Icons.chevron_right, color: AppTheme.textSecondaryOf(context)),
@@ -631,7 +631,7 @@ Future<void> _showSharedWatchlistOptions(BuildContext context) async {
             subtitle: Text('Your local titles are merged safely with linked devices.'),
             ),
             ListTile(
-              leading: const Icon(Icons.add_link, color: AppTheme.accent),
+              leading: Icon(Icons.add_link, color: AppTheme.resolvedAccent(context)),
               title: const Text('Create shared watchlist'),
               subtitle: const Text('Make this device the first linked device'),
               onTap: () async {
@@ -668,7 +668,7 @@ Future<void> _showSharedWatchlistOptions(BuildContext context) async {
             subtitle: Text('New additions and removals sync to all linked devices.'),
           ),
           ListTile(
-            leading: const Icon(Icons.sync, color: AppTheme.accent),
+            leading: Icon(Icons.sync, color: AppTheme.resolvedAccent(context)),
             title: const Text('Sync now'),
             onTap: () async {
               Navigator.pop(sheetContext);

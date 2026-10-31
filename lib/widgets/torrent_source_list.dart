@@ -279,7 +279,7 @@ class _TorrentTabsState extends State<_TorrentTabs>
         ),
         const SizedBox(height: 12),
         Text(
-          'Torrent playback is currently available on Android. Availability depends on active peers and file format.',
+          'Torrent playback is available on Android, macOS, and iPadOS. Availability depends on active peers and file format.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
