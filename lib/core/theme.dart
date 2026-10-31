@@ -128,13 +128,18 @@ class AppTheme {
       );
 
   /// Poster/media card titles - Space Grotesk, a little heavier than plain
-  /// body text so a whole grid of cards still reads as titles first.
-  static const TextStyle cardTitleStyle = TextStyle(
-    fontFamily: sansFont,
-    fontSize: 13,
-    fontWeight: FontWeight.w600,
-    color: textPrimary,
-  );
+  /// body text so a whole grid of cards still reads as titles first. Sits
+  /// in the plain Column below the poster image (not overlaid on it like
+  /// [heroTitleStyle] is on its backdrop), so - like [sectionHeaderStyle] -
+  /// it takes [context] to follow the light/dark theme; a fixed near-white
+  /// color here made every poster card's title invisible against White's
+  /// near-white page background.
+  static TextStyle cardTitleStyle(BuildContext context) => TextStyle(
+        fontFamily: sansFont,
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: textPrimaryOf(context),
+      );
 
   /// Small metadata under a title - year, episode tag, runtime, genre list
   /// - always muted, always a size down from the title it sits under. Takes

@@ -172,7 +172,7 @@ class _OverviewCard extends StatelessWidget {
         children: [
           Text(
             '${snapshot.online} of ${snapshot.total} providers online',
-            style: AppTheme.cardTitleStyle.copyWith(fontSize: 18),
+            style: AppTheme.cardTitleStyle(context).copyWith(fontSize: 18),
           ),
           const SizedBox(height: 6),
           Text(
@@ -227,7 +227,7 @@ class _ProviderTile extends StatelessWidget {
           provider.isOnline ? Icons.check_circle_outline : Icons.error_outline,
           color: color,
         ),
-        title: Text(provider.displayName, style: AppTheme.cardTitleStyle),
+        title: Text(provider.displayName, style: AppTheme.cardTitleStyle(context)),
         subtitle: Text(
           provider.requestTime > Duration.zero
               ? '${provider.requestTime.inMilliseconds} ms'

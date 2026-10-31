@@ -385,7 +385,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     contentPadding: EdgeInsets.zero,
                     dense: true,
                     activeColor: AppTheme.resolvedAccent(context),
-                    title: const Text('Reduce motion', style: AppTheme.cardTitleStyle),
+                    title: Text('Reduce motion', style: AppTheme.cardTitleStyle(context)),
                     subtitle: Text(
                       'Turns all scroll-in animations off.',
                       style: AppTheme.metaStyle(context),
@@ -395,7 +395,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   if (!settings.reduceMotion) ...[
                     const SizedBox(height: 4),
-                    const Text('Entrance style', style: AppTheme.cardTitleStyle),
+                    Text('Entrance style', style: AppTheme.cardTitleStyle(context)),
                     const SizedBox(height: 4),
                     DropdownButtonFormField<EntranceAnimationStyle>(
                       value: settings.entranceAnimationStyle,
@@ -427,7 +427,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 4),
                     Text(settings.entranceAnimationStyle.description, style: AppTheme.metaStyle(context)),
                     const SizedBox(height: 14),
-                    const Text('Animation sweep color', style: AppTheme.cardTitleStyle),
+                    Text('Animation sweep color', style: AppTheme.cardTitleStyle(context)),
                     const SizedBox(height: 8),
                     _ColorSwatchRow(
                       selected: settings.scrollAnimationColor,
@@ -913,7 +913,7 @@ class _CardHeader extends StatelessWidget {
       children: [
         Icon(icon, color: AppTheme.resolvedAccent(context), size: 20),
         const SizedBox(width: 10),
-        Expanded(child: Text(title, style: AppTheme.cardTitleStyle)),
+        Expanded(child: Text(title, style: AppTheme.cardTitleStyle(context))),
       ],
     );
   }
@@ -1060,7 +1060,7 @@ class _FontCategoryTile extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(category.label, style: AppTheme.cardTitleStyle),
+          Text(category.label, style: AppTheme.cardTitleStyle(context)),
           const SizedBox(height: 2),
           Text(category.description, style: AppTheme.metaStyle(context)),
           const SizedBox(height: 8),

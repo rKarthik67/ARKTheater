@@ -34,7 +34,6 @@ class DetailScreen extends StatefulWidget {
     super.key,
     required this.item,
     required this.onSelectRelated,
-    this.autoPlay = false,
     this.autoPlaySeason,
     this.autoPlayEpisode,
   });
@@ -42,12 +41,13 @@ class DetailScreen extends StatefulWidget {
   final MediaItem item;
   final void Function(MediaItem) onSelectRelated;
 
-  /// Set when this screen was opened from "Recently Watched" to resume
-  /// playback immediately instead of requiring another tap on Play -
-  /// PlaybackPositionService (inside the player screens) does the actual
-  /// seek-to-last-position once playback opens. autoPlaySeason/Episode are
-  /// null for a movie and set for a specific TV episode.
-  final bool autoPlay;
+  /// Set when this screen was opened from "Recently Watched", to select
+  /// the right season and land straight on that specific episode's page -
+  /// not to play anything automatically. The viewer still picks
+  /// Scraper/Embed/Torrent there themselves, same as opening the episode
+  /// any other way; PlaybackPositionService (inside the player screens)
+  /// seeks to the saved position once they do. Both null for a movie -
+  /// landing on this screen already *is* its detail page.
   final int? autoPlaySeason;
   final int? autoPlayEpisode;
 
@@ -89,20 +89,21 @@ class _DetailScreenState extends State<DetailScreen> {
     _future = _tmdb.details(widget.item.id, widget.item.type);
     _providersFuture = _loadProviders();
     if (widget.item.type == MediaType.tv) {
-      if (widget.autoPlay && widget.autoPlaySeason != null) {
+      if (widget.autoPlaySeason != null) {
         _selectedSeason = widget.autoPlaySeason!;
       }
-      _loadEpisodes(_selectedSeason);
-    }
-    if (widget.autoPlay) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _play(
-            season: widget.autoPlaySeason,
-            episode: widget.autoPlayEpisode,
-            chooseProvider: false,
-          );
-        }
+      final targetEpisode = widget.autoPlayEpisode;
+      _loadEpisodes(_selectedSeason).then((_) {
+        if (!mounted || targetEpisode == null) return;
+        final match =
+            _episodes.where((e) => e.episodeNumber == targetEpisode);
+        if (match.isEmpty) return;
+        // One more frame so the season/episode picker underneath has
+        // actually laid out before pushing on top of it - matches how
+        // every other navigation-after-setState in this screen behaves.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _openEpisodePage(match.first);
+        });
       });
     }
   }

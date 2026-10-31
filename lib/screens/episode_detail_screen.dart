@@ -142,44 +142,54 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final episode = widget.episode;
+    final stillUrl = episode.stillUrl(size: 'w780');
     return Scaffold(
-      appBar: AppBar(title: Text('S${widget.season} E${episode.episodeNumber}')),
+      appBar:
+          AppBar(title: Text('S${widget.season} E${episode.episodeNumber}')),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          if (episode.stillUrl(size: 'w780') != null)
+          if (stillUrl != null)
             ClipRRect(
               borderRadius: BorderRadius.circular(14),
               child: CachedNetworkImage(
-                  imageUrl: episode.stillUrl(size: 'w780')!,
-                  height: 210,
-                  fit: BoxFit.cover),
+                imageUrl: stillUrl,
+                height: 180,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
             ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: widget.onScraper,
+                  icon: const Icon(Icons.play_arrow),
+                  label: const Text('Play'),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => setState(() => _showTorrent = !_showTorrent),
+                  icon: const Icon(Icons.hub_outlined),
+                  label: const Text('Torrent'),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 16),
           Text(episode.name, style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: 8),
           Text(episode.overview ?? 'No episode description is available.'),
-          const SizedBox(height: 22),
-          Text('Watch options', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
           ListTile(
-              leading: const Icon(Icons.play_circle_outline),
-              title: const Text('Scraper sources'),
-              subtitle: const Text('Find regular stream providers'),
-              onTap: widget.onScraper),
-          ListTile(
+              contentPadding: EdgeInsets.zero,
               leading: const Icon(Icons.open_in_browser),
               title: const Text('Embedded player'),
               subtitle: const Text('Open an embed source'),
               onTap: widget.onEmbed),
-          ListTile(
-            leading: const Icon(Icons.hub_outlined),
-            title: const Text('Torrent sources'),
-            subtitle: const Text('4K, 1080p, 720p and fastest auto choice'),
-            trailing:
-                Icon(_showTorrent ? Icons.expand_less : Icons.expand_more),
-            onTap: () => setState(() => _showTorrent = !_showTorrent),
-          ),
           if (_showTorrent)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -209,8 +219,8 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
           const SizedBox(height: 20),
           Text('Episode cast', style: Theme.of(context).textTheme.titleLarge),
           FutureBuilder<List<CastMember>>(
-            future: TmdbService()
-                .episodeCast(widget.item.id, widget.season, episode.episodeNumber),
+            future: TmdbService().episodeCast(
+                widget.item.id, widget.season, episode.episodeNumber),
             builder: (_, snapshot) {
               if (!snapshot.hasData)
                 return const Padding(

@@ -309,19 +309,17 @@ class _RecentlyWatchedRow extends StatelessWidget {
 
   final void Function(MediaItem) onItemTap;
 
-  // Goes straight into playback instead of the details page - the whole
-  // point of "Recently Watched" is one tap to keep watching. DetailScreen
-  // does the actual provider-resolving/loading-state work it already has
-  // (autoPlay just fires the same _play() its own Play button does), and
-  // the player screens themselves seek to the saved position once the
-  // stream opens (see PlaybackPositionService).
+  // Lands on the title's detail page (or, for a TV episode, straight on
+  // that episode's own page) rather than resuming playback directly - the
+  // viewer picks Scraper/Embed/Torrent there themselves, same as opening
+  // it any other way. The player screens still seek to the saved position
+  // once a stream opens (see PlaybackPositionService).
   void _resume(BuildContext context, RecentlyWatchedEntry entry) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => DetailScreen(
           item: entry.item,
           onSelectRelated: onItemTap,
-          autoPlay: true,
           autoPlaySeason: entry.season,
           autoPlayEpisode: entry.episode,
         ),

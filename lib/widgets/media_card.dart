@@ -111,7 +111,7 @@ class MediaCard extends StatelessWidget {
             item.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: AppTheme.resolvedStyle(context, AppTheme.cardTitleStyle, TextCategory.cardTitle),
+            style: AppTheme.resolvedStyle(context, AppTheme.cardTitleStyle(context), TextCategory.cardTitle),
           ),
           if (subtitle != null)
             Text(
