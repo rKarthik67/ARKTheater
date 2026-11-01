@@ -267,6 +267,25 @@ class TmdbService {
     return value == null || value.isEmpty ? null : value;
   }
 
+  /// Just title + year, for torrent catalogue searches that only take a
+  /// free-text query (e.g. Pirate Bay) rather than an IMDb id - a single
+  /// lightweight request instead of [details]'s full credits/similar/
+  /// recommendations bundle.
+  Future<String?> titleAndYear(MediaType type, int id) async {
+    final path = type == MediaType.movie ? '/movie/$id' : '/tv/$id';
+    final response = await _dio.get(path, queryParameters: _auth);
+    final data = response.data as Map<String, dynamic>;
+    final title = type == MediaType.movie
+        ? data['title']?.toString()
+        : data['name']?.toString();
+    if (title == null || title.isEmpty) return null;
+    final date = type == MediaType.movie
+        ? data['release_date']?.toString()
+        : data['first_air_date']?.toString();
+    final year = (date != null && date.length >= 4) ? date.substring(0, 4) : null;
+    return year == null ? title : '$title $year';
+  }
+
   Future<MediaDetail> details(int id, MediaType type) async {
     final path = type == MediaType.movie ? '/movie/$id' : '/tv/$id';
     final results = await Future.wait([

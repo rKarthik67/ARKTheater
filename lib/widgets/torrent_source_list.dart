@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/media_item.dart';
 import '../services/torrent_catalog_service.dart';
 import '../services/torrent_stream_service.dart';
+import '../state/settings_provider.dart';
 
 /// `fileIndex` is which file within a multi-file torrent is the requested
 /// episode (see [TorrentSource.fileIndex]) - `null` for single-file
@@ -111,6 +113,8 @@ class _TorrentSourceListState extends State<TorrentSourceList> {
         tmdbId: widget.tmdbId,
         season: widget.season,
         episode: widget.episode,
+        customIndexerUrl:
+            context.read<SettingsProvider>().customTorrentIndexerUrl,
       );
 
   void _retry() => setState(() => _sources = _load());
@@ -186,9 +190,12 @@ class _TorrentTabs extends StatefulWidget {
 
 class _TorrentTabsState extends State<_TorrentTabs>
     with SingleTickerProviderStateMixin {
-  static const _tabs = ['4K', '1080p', '720p', 'All'];
+  static const _tabs = ['All', '4K', '1080p', '720p'];
   late final TabController _tabController =
       TabController(length: _tabs.length, vsync: this);
+
+  /// `null` means no source filter - every indexer's results are included.
+  String? _selectedSource;
 
   @override
   void dispose() {
@@ -200,13 +207,23 @@ class _TorrentTabsState extends State<_TorrentTabs>
   bool _is1080p(String t) => t.contains('1080');
   bool _is720p(String t) => t.contains('720');
 
+  /// This indexer's own results, with the quality tabs still built on top -
+  /// e.g. filtering to "Pirate Bay" and then opening the "4K" tab shows only
+  /// Pirate Bay's 4K results, not every indexer's.
+  List<TorrentSource> get _bySource => _selectedSource == null
+      ? widget.sources
+      : widget.sources
+          .where((source) => source.source == _selectedSource)
+          .toList(growable: false);
+
   List<TorrentSource> _forTab(int index) {
-    if (index == 3) return widget.sources; // All, already seed-sorted.
-    return widget.sources.where((source) {
+    final base = _bySource;
+    if (index == 0) return base; // All, already seed-sorted.
+    return base.where((source) {
       final t = source.title.toLowerCase();
       return switch (index) {
-        0 => _is4k(t),
-        1 => _is1080p(t),
+        1 => _is4k(t),
+        2 => _is1080p(t),
         _ => _is720p(t),
       };
     }).toList(growable: false);
@@ -214,6 +231,9 @@ class _TorrentTabsState extends State<_TorrentTabs>
 
   @override
   Widget build(BuildContext context) {
+    final bySource = _bySource;
+    final sourceNames = widget.sources.map((s) => s.source).toSet().toList()
+      ..sort();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -224,13 +244,39 @@ class _TorrentTabsState extends State<_TorrentTabs>
             child: Text('No torrent sources found.'),
           )
         else ...[
-          FilledButton.icon(
-            onPressed: () => _selectAndPlay(context, widget.onPlay,
-                widget.sources.first.magnet, widget.sources.first.fileIndex),
-            icon: const Icon(Icons.auto_awesome),
-            label:
-                Text('Auto play best · ${widget.sources.first.seeds ?? 0} seeds'),
-          ),
+          if (sourceNames.length > 1) ...[
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text('All sources'),
+                  selected: _selectedSource == null,
+                  onSelected: (_) => setState(() => _selectedSource = null),
+                ),
+                for (final name in sourceNames)
+                  ChoiceChip(
+                    label: Text(name),
+                    selected: _selectedSource == name,
+                    onSelected: (_) => setState(() => _selectedSource = name),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+          ],
+          if (bySource.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Text('No sources from this indexer.'),
+            )
+          else
+            FilledButton.icon(
+              onPressed: () => _selectAndPlay(context, widget.onPlay,
+                  bySource.first.magnet, bySource.first.fileIndex),
+              icon: const Icon(Icons.auto_awesome),
+              label:
+                  Text('Auto play best · ${bySource.first.seeds ?? 0} seeds'),
+            ),
           const SizedBox(height: 16),
           TabBar(
             controller: _tabController,
@@ -277,10 +323,92 @@ class _TorrentTabsState extends State<_TorrentTabs>
           icon: const Icon(Icons.play_arrow),
           label: const Text('Buffer and play'),
         ),
+        const SizedBox(height: 24),
+        const _CustomIndexerSection(),
         const SizedBox(height: 12),
         Text(
           'Torrent playback is available on Android, macOS, and iPadOS. Availability depends on active peers and file format.',
           style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ],
+    );
+  }
+}
+
+/// Lets the viewer point the in-app picker at any torrent search API that
+/// returns apibay.org's JSON shape ({ name, info_hash, seeders }) - not
+/// limited to Pirate Bay mirrors, just whatever happens to match that shape.
+/// See TorrentCatalogService._customIndexer.
+class _CustomIndexerSection extends StatelessWidget {
+  const _CustomIndexerSection();
+
+  Future<void> _configure(BuildContext context, SettingsProvider settings) async {
+    final controller =
+        TextEditingController(text: settings.customTorrentIndexerUrl ?? '');
+    final value = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Custom torrent indexer'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: TextInputType.url,
+          decoration: const InputDecoration(
+            hintText: 'https://apibay.org',
+            helperText: 'Must return apibay-shaped JSON search results.',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (value == null) return;
+    final saved = await settings.setCustomTorrentIndexerUrl(value);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(saved
+          ? 'Custom indexer saved. Reopen this list to use it.'
+          : 'Enter a valid full HTTP or HTTPS URL.'),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = context.watch<SettingsProvider>();
+    final url = settings.customTorrentIndexerUrl;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Custom indexer', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 8),
+        if (url != null) ...[
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.travel_explore),
+              title: Text(url, overflow: TextOverflow.ellipsis),
+              subtitle: const Text('Active custom indexer'),
+              trailing: IconButton(
+                tooltip: 'Remove',
+                icon: const Icon(Icons.delete_outline),
+                onPressed: settings.removeCustomTorrentIndexerUrl,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+        ],
+        OutlinedButton.icon(
+          onPressed: () => _configure(context, settings),
+          icon: const Icon(Icons.add_link),
+          label: Text(url == null ? 'Add custom indexer' : 'Replace custom indexer'),
         ),
       ],
     );

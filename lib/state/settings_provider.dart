@@ -46,6 +46,8 @@ class SettingsProvider extends ChangeNotifier {
   static const _customScraperBackupUrlKey =
       'settings_custom_scraper_backup_url';
   static const _torrentSourceUrlKey = 'settings_torrent_source_url';
+  static const _customTorrentIndexerUrlKey =
+      'settings_custom_torrent_indexer_url';
   static const _themeModeKey = 'settings_theme_mode';
   static const _scraperSourceVersionKey = 'settings_scraper_source_version';
   static const _scraperSourceVersion = 2;
@@ -137,6 +139,13 @@ class SettingsProvider extends ChangeNotifier {
   String? get customScraperBackupUrl => _customScraperBackupUrl;
   String? _torrentSourceUrl;
   String? get torrentSourceUrl => _torrentSourceUrl;
+  /// A viewer-supplied torrent search API, in the same JSON shape as
+  /// apibay.org's `q.php?q=` (name/info_hash/seeders) - see
+  /// TorrentCatalogService._customIndexer. Unrelated to [torrentSourceUrl]
+  /// above, which swaps the whole /api/v2 backend rather than adding one
+  /// more torrent indexer to the in-app picker.
+  String? _customTorrentIndexerUrl;
+  String? get customTorrentIndexerUrl => _customTorrentIndexerUrl;
 
   bool _isLoaded = false;
   bool get isLoaded => _isLoaded;
@@ -174,6 +183,10 @@ class SettingsProvider extends ChangeNotifier {
       final savedTorrentSource = prefs.getString(_torrentSourceUrlKey);
       if (_isValidScraperUrl(savedTorrentSource)) {
         _torrentSourceUrl = _normalizeScraperUrl(savedTorrentSource!);
+      }
+      final savedCustomIndexer = prefs.getString(_customTorrentIndexerUrlKey);
+      if (_isValidScraperUrl(savedCustomIndexer)) {
+        _customTorrentIndexerUrl = _normalizeScraperUrl(savedCustomIndexer!);
       }
       final savedScraperUrl = prefs.getString(_scraperBaseUrlKey);
       final savedSourceVersion = prefs.getInt(_scraperSourceVersionKey) ?? 0;
@@ -421,6 +434,35 @@ class SettingsProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_torrentSourceUrlKey);
       await prefs.setString(_scraperBaseUrlKey, _scraperBaseUrl);
+    } catch (_) {
+      // Best-effort persistence.
+    }
+  }
+
+  /// Saves a custom torrent-indexer API (must return apibay-shaped JSON -
+  /// see TorrentCatalogService._customIndexer). Any site whose search API
+  /// happens to return that same { name, info_hash, seeders } shape works,
+  /// not just apibay.org/thepiratebay mirrors.
+  Future<bool> setCustomTorrentIndexerUrl(String value) async {
+    if (!_isValidScraperUrl(value)) return false;
+    final next = _normalizeScraperUrl(value);
+    _customTorrentIndexerUrl = next;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_customTorrentIndexerUrlKey, next);
+    } catch (_) {
+      // Stays usable for this session even if persistence fails.
+    }
+    return true;
+  }
+
+  Future<void> removeCustomTorrentIndexerUrl() async {
+    _customTorrentIndexerUrl = null;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_customTorrentIndexerUrlKey);
     } catch (_) {
       // Best-effort persistence.
     }
