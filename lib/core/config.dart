@@ -44,5 +44,12 @@ class AppConfig {
   // files if you keep them in sync).
   static String get wyzieApiKey => dotenv.env['WYZIE_SUBS_API_KEY'] ?? '';
 
+  /// Lets this app (and only this app) mint a one-use 4-digit code that
+  /// unlocks the scraper-backed player on the private ArkPlay web apps - see
+  /// StreamUnlockService and ARKVideoScrapper's routes/stream-unlock.ts.
+  /// Must match that server's STREAM_UNLOCK_APP_SECRET exactly.
+  static String get streamUnlockAppSecret =>
+      dotenv.env['STREAM_UNLOCK_APP_SECRET'] ?? '';
+
   static const String tmdbImageBase = 'https://image.tmdb.org/t/p';
 }

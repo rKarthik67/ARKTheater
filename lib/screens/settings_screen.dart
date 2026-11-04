@@ -7,6 +7,7 @@ import '../core/app_fonts.dart';
 import '../core/theme.dart';
 import '../models/media_item.dart';
 import '../services/playback_position_service.dart';
+import '../services/stream_unlock_service.dart';
 import '../services/torrent_stream_service.dart';
 import '../services/github_update_service.dart';
 import '../services/watchlist_backup_service.dart';
@@ -203,6 +204,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const StreamSourcesScreen()),
                 ),
+              ),
+            ),
+            _SettingsCard(
+              child: ListTile(
+                leading: Icon(Icons.qr_code_2_outlined, color: AppTheme.resolvedAccent(context)),
+                title: const Text('ArkPlay unlock code'),
+                subtitle: Text('Four-digit code to unlock the player on ArkPlay web', style: AppTheme.metaStyle(context)),
+                trailing: Icon(Icons.chevron_right, color: AppTheme.textSecondaryOf(context)),
+                onTap: () => _showArkPlayUnlockCode(context),
               ),
             ),
           ],
@@ -782,6 +792,33 @@ Future<void> _showPairingCode(BuildContext context) async {
     );
   } catch (error) {
     if (context.mounted) messenger.showSnackBar(SnackBar(content: Text("Couldn't create pairing code: $error")));
+  }
+}
+
+Future<void> _showArkPlayUnlockCode(BuildContext context) async {
+  final messenger = ScaffoldMessenger.of(context);
+  try {
+    final unlock = await StreamUnlockService().createCode();
+    if (!context.mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('ArkPlay unlock code'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('On ArkPlay web, triple-click the logo and enter:'),
+            const SizedBox(height: 16),
+            Text(unlock.code, style: Theme.of(dialogContext).textTheme.displaySmall?.copyWith(letterSpacing: 8)),
+            const SizedBox(height: 16),
+            const Text('This code is one-use and expires in four minutes.', textAlign: TextAlign.center),
+          ],
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Done'))],
+      ),
+    );
+  } catch (error) {
+    if (context.mounted) messenger.showSnackBar(SnackBar(content: Text("Couldn't create unlock code: $error")));
   }
 }
 
