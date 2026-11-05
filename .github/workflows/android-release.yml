@@ -44,6 +44,7 @@ jobs:
         env:
           TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
           WYZIE_SUBS_API_KEY: ${{ secrets.WYZIE_SUBS_API_KEY }}
+          STREAM_UNLOCK_APP_SECRET: ${{ secrets.STREAM_UNLOCK_APP_SECRET }}
         run: |
           test -n "$TMDB_API_KEY"
           cat > .env <<EOF
@@ -51,6 +52,7 @@ jobs:
           WYZIE_SUBS_API_KEY=$WYZIE_SUBS_API_KEY
           SCRAPER_BASE_URL=https://arkscraper.duckdns.org
           SHARED_WATCHLIST_BASE_URL=https://arkscraper.duckdns.org
+          STREAM_UNLOCK_APP_SECRET=$STREAM_UNLOCK_APP_SECRET
           EOF
 
       - name: Build signed APK
