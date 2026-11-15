@@ -125,6 +125,9 @@ class _EpisodeDetailScreenState extends State<EpisodeDetailScreen> {
             providers: providers,
             initialProviderIndex: 0,
             initialResult: result,
+            overview: widget.episode.overview ?? widget.item.overview,
+            yearLabel: widget.item.year,
+            rating: widget.item.voteAverage,
           ),
         ),
       );

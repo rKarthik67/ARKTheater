@@ -37,6 +37,11 @@ class PlayerScreen extends StatelessWidget {
     required this.providers,
     required this.initialProviderIndex,
     required this.initialResult,
+    this.overview,
+    this.yearLabel,
+    this.runtimeMinutes,
+    this.rating,
+    this.genres = const [],
   });
 
   final String title;
@@ -47,6 +52,16 @@ class PlayerScreen extends StatelessWidget {
   final List<VideoProvider> providers;
   final int initialProviderIndex;
   final ProviderLoadResult initialResult;
+
+  // Only consumed by ArkMobilePlayerScreen's pause/loading title card below -
+  // every other player branch ignores these. All optional so existing call
+  // sites that don't have this TMDB detail (live TV, torrent fallbacks)
+  // don't need to change.
+  final String? overview;
+  final String? yearLabel;
+  final int? runtimeMinutes;
+  final double? rating;
+  final List<String> genres;
 
   bool get _usesMobileEngine =>
       !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
@@ -79,6 +94,11 @@ class PlayerScreen extends StatelessWidget {
           providers: providers,
           initialProviderIndex: initialProviderIndex,
           initialResult: initialResult,
+          overview: overview,
+          yearLabel: yearLabel,
+          runtimeMinutes: runtimeMinutes,
+          rating: rating,
+          genres: genres,
         );
       }
       return MobilePlayerScreen(

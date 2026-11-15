@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -48,6 +49,11 @@ class ArkMobilePlayerScreen extends StatefulWidget {
     required this.providers,
     required this.initialProviderIndex,
     required this.initialResult,
+    this.overview,
+    this.yearLabel,
+    this.runtimeMinutes,
+    this.rating,
+    this.genres = const [],
   });
 
   final String title;
@@ -58,6 +64,14 @@ class ArkMobilePlayerScreen extends StatefulWidget {
   final List<VideoProvider> providers;
   final int initialProviderIndex;
   final ProviderLoadResult initialResult;
+
+  // Shown on the pause/loading title card below - all optional, see
+  // PlayerScreen's doc comment on the same fields.
+  final String? overview;
+  final String? yearLabel;
+  final int? runtimeMinutes;
+  final double? rating;
+  final List<String> genres;
 
   @override
   State<ArkMobilePlayerScreen> createState() => _ArkMobilePlayerScreenState();
@@ -142,6 +156,24 @@ class _ArkMobilePlayerScreenState extends State<ArkMobilePlayerScreen> {
   bool _showPlayPausePulse = false;
   Timer? _pulseTimer;
 
+  // Drives the pause title card: web's .ark-pause-layer only ever shows
+  // once the title has actually played (see custom-player.js's
+  // hasPlayedOnce), otherwise it would also cover the very first loading
+  // frame before anything has started.
+  bool _hasPlayedOnce = false;
+
+  bool _isFullscreen = false;
+
+  // Hardware D-pad/remote support (Android TV - leanback is already
+  // declared in the manifest). One screen-wide Focus node intercepts
+  // left/right/center/media keys; chrome buttons are excluded from focus
+  // traversal (see build()) so there's nothing to compete with it, and
+  // touch/tap on those buttons is unaffected since onTap/onPressed fire
+  // from gestures, not focus.
+  final FocusNode _remoteFocusNode = FocusNode(debugLabel: 'ark-player-remote');
+  LogicalKeyboardKey? _heldSeekKey;
+  int _seekRepeatCount = 0;
+
   @override
   void initState() {
     super.initState();
@@ -205,6 +237,17 @@ class _ArkMobilePlayerScreenState extends State<ArkMobilePlayerScreen> {
     _sleepTimer?.cancel();
     _chromeHideTimer?.cancel();
     _pulseTimer?.cancel();
+    _remoteFocusNode.dispose();
+    if (_isFullscreen) {
+      unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+          overlays: SystemUiOverlay.values));
+      unawaited(SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]));
+    }
     WakelockPlus.disable();
     final videoValue = _controller?.videoPlayerController?.value;
     if (videoValue != null) {
@@ -383,8 +426,24 @@ class _ArkMobilePlayerScreenState extends State<ArkMobilePlayerScreen> {
   }
 
   void _onPlayerEvent(BetterPlayerEvent event) {
-    if (event.betterPlayerEventType == BetterPlayerEventType.exception) {
-      return;
+    switch (event.betterPlayerEventType) {
+      case BetterPlayerEventType.exception:
+        return;
+      case BetterPlayerEventType.play:
+        if (!mounted) return;
+        setState(() => _hasPlayedOnce = true);
+        return;
+      case BetterPlayerEventType.pause:
+        if (!mounted) return;
+        // Rebuilds so the pause title card (which reads
+        // controller.isPlaying() directly in build()) appears immediately -
+        // nothing else currently triggers a rebuild on a native pause (e.g.
+        // tapping the OS media-session notification), only the in-app
+        // _togglePlayPause button path does via its own setState.
+        setState(() {});
+        return;
+      default:
+        return;
     }
   }
 
@@ -643,6 +702,88 @@ class _ArkMobilePlayerScreenState extends State<ArkMobilePlayerScreen> {
     _showChrome();
   }
 
+  // --- Fullscreen -----------------------------------------------------------
+
+  // Mirrors better_player_plus's own fullscreen enter/exit exactly
+  // (BetterPlayer._pushFullScreenWidget/_exitFullscreen in the package
+  // source) so this custom button behaves identically to the old player's
+  // built-in one: landscape + immersive (system bars hidden) while
+  // fullscreen, restored to free rotation + both bars on exit.
+  Future<void> _toggleFullscreen() async {
+    final next = !_isFullscreen;
+    if (next) {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    } else {
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+          overlays: SystemUiOverlay.values);
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+    }
+    if (!mounted) return;
+    setState(() => _isFullscreen = next);
+    _showChrome();
+  }
+
+  // --- TV remote control ----------------------------------------------------
+
+  // D-pad left/right seek, accelerating the longer a direction is held (each
+  // KeyRepeatEvent bumps the tier) so a long hold behaves like fast-dragging
+  // a seek bar; center/mediaPlayPause toggles playback. Mirrors the simple
+  // keyboard pattern already used for iPad/macOS in
+  // macos_player_screen.dart's _handleKeyboardEvent, extended with
+  // acceleration and TV media keys. Chrome buttons are excluded from focus
+  // traversal (see build()) so this one screen-wide node always gets the
+  // key event - touch/tap on those buttons is unaffected either way.
+  static final _seekKeys = {
+    LogicalKeyboardKey.arrowLeft,
+    LogicalKeyboardKey.arrowRight,
+    LogicalKeyboardKey.mediaRewind,
+    LogicalKeyboardKey.mediaFastForward,
+  };
+
+  KeyEventResult _handleRemoteKeyEvent(FocusNode node, KeyEvent event) {
+    final key = event.logicalKey;
+    if (event is KeyUpEvent) {
+      if (_seekKeys.contains(key)) {
+        _heldSeekKey = null;
+        _seekRepeatCount = 0;
+      }
+      return KeyEventResult.ignored;
+    }
+    final isRepeat = event is KeyRepeatEvent;
+    if (key == LogicalKeyboardKey.select ||
+        key == LogicalKeyboardKey.enter ||
+        key == LogicalKeyboardKey.mediaPlayPause) {
+      if (!isRepeat) _togglePlayPause();
+      return KeyEventResult.handled;
+    }
+    final isBack = key == LogicalKeyboardKey.arrowLeft ||
+        key == LogicalKeyboardKey.mediaRewind;
+    final isForward = key == LogicalKeyboardKey.arrowRight ||
+        key == LogicalKeyboardKey.mediaFastForward;
+    if (isBack || isForward) {
+      if (_heldSeekKey != key) {
+        _heldSeekKey = key;
+        _seekRepeatCount = 0;
+      } else if (isRepeat) {
+        _seekRepeatCount++;
+      }
+      final tier = (_seekRepeatCount ~/ 3).clamp(0, 5);
+      final seconds = 10 * (tier + 1);
+      _seekBy(Duration(seconds: isBack ? -seconds : seconds));
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   // --- Settings sheet -----------------------------------------------------
 
   void _openSettingsSheet({_SheetPage initialPage = _SheetPage.main}) {
@@ -693,6 +834,10 @@ class _ArkMobilePlayerScreenState extends State<ArkMobilePlayerScreen> {
 
     final controller = _controller;
     final videoValue = controller?.videoPlayerController?.value;
+    final isLoadingOverlay = _loading || _switchingProvider;
+    final isPaused = !isLoadingOverlay &&
+        _hasPlayedOnce &&
+        !(controller?.isPlaying() ?? true);
 
     return PopScope(
       canPop: false,
@@ -701,78 +846,95 @@ class _ArkMobilePlayerScreenState extends State<ArkMobilePlayerScreen> {
       },
       child: Scaffold(
         backgroundColor: Colors.black,
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (controller != null) BetterPlayer(controller: controller),
-            Positioned.fill(
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: _toggleChrome,
-                onDoubleTapDown: (details) {
-                  final width = MediaQuery.sizeOf(context).width;
-                  if (details.globalPosition.dx < width / 2) {
-                    _seekBy(const Duration(seconds: -10));
-                  } else {
-                    _seekBy(const Duration(seconds: 10));
-                  }
-                },
-              ),
+        body: Focus(
+          focusNode: _remoteFocusNode,
+          autofocus: true,
+          onKeyEvent: _handleRemoteKeyEvent,
+          child: ExcludeFocus(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (controller != null) BetterPlayer(controller: controller),
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _toggleChrome,
+                    onDoubleTapDown: (details) {
+                      final width = MediaQuery.sizeOf(context).width;
+                      if (details.globalPosition.dx < width / 2) {
+                        _seekBy(const Duration(seconds: -10));
+                      } else {
+                        _seekBy(const Duration(seconds: 10));
+                      }
+                    },
+                  ),
+                ),
+                if (_showPlayPausePulse)
+                  Center(
+                    child: _ArkPulseIcon(
+                      icon: (controller?.isPlaying() ?? false)
+                          ? Icons.play_arrow_rounded
+                          : Icons.pause_rounded,
+                    ),
+                  ),
+                AnimatedOpacity(
+                  opacity: _chromeVisible ? 1 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  child: IgnorePointer(
+                    ignoring: !_chromeVisible,
+                    child: _ArkChrome(
+                      title: widget.title,
+                      videoValue: videoValue,
+                      accent: _playerAccent(context),
+                      isFullscreen: _isFullscreen,
+                      onBack: _handleBack,
+                      onTogglePlayPause: _togglePlayPause,
+                      onSeekBack: () => _seekBy(const Duration(seconds: -10)),
+                      onSeekForward: () => _seekBy(const Duration(seconds: 10)),
+                      onScrub: (position) {
+                        unawaited(controller?.seekTo(position));
+                        _showChrome();
+                      },
+                      onOpenSettings: () => _openSettingsSheet(),
+                      onToggleFullscreen: _toggleFullscreen,
+                      formatDuration: _formatDuration,
+                    ),
+                  ),
+                ),
+                if (_torrentStatus != null)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: SafeArea(
+                      child: _ArkPill(label: _torrentStatus!.label),
+                    ),
+                  ),
+                if (isLoadingOverlay || isPaused)
+                  _ArkTitleCard(
+                    title: widget.title,
+                    overview: widget.overview,
+                    yearLabel: widget.yearLabel,
+                    runtimeMinutes: widget.runtimeMinutes,
+                    rating: widget.rating,
+                    genres: widget.genres,
+                    isLoading: isLoadingOverlay,
+                    accent: _playerAccent(context),
+                  ),
+                if (_showFrozenHint && !_loading)
+                  Positioned(
+                    left: 24,
+                    right: 24,
+                    bottom: 120,
+                    child: _ArkFrozenHint(
+                      hasOtherProviders: widget.providers.length > 1,
+                      onTryAnotherSource: () =>
+                          _openSettingsSheet(initialPage: _SheetPage.server),
+                      onWatchEmbedded: _openWebViewFallback,
+                    ),
+                  ),
+              ],
             ),
-            if (_showPlayPausePulse)
-              Center(
-                child: _ArkPulseIcon(
-                  icon: (controller?.isPlaying() ?? false)
-                      ? Icons.play_arrow_rounded
-                      : Icons.pause_rounded,
-                ),
-              ),
-            AnimatedOpacity(
-              opacity: _chromeVisible ? 1 : 0,
-              duration: const Duration(milliseconds: 180),
-              child: IgnorePointer(
-                ignoring: !_chromeVisible,
-                child: _ArkChrome(
-                  title: widget.title,
-                  videoValue: videoValue,
-                  accent: _playerAccent(context),
-                  onBack: _handleBack,
-                  onTogglePlayPause: _togglePlayPause,
-                  onSeekBack: () => _seekBy(const Duration(seconds: -10)),
-                  onSeekForward: () => _seekBy(const Duration(seconds: 10)),
-                  onScrub: (position) {
-                    unawaited(controller?.seekTo(position));
-                    _showChrome();
-                  },
-                  onOpenSettings: () => _openSettingsSheet(),
-                  formatDuration: _formatDuration,
-                ),
-              ),
-            ),
-            if (_torrentStatus != null)
-              Positioned(
-                top: 8,
-                right: 8,
-                child: SafeArea(
-                  child: _ArkPill(label: _torrentStatus!.label),
-                ),
-              ),
-            if (_loading || _switchingProvider)
-              Center(
-                  child: CircularProgressIndicator(color: _playerAccent(context))),
-            if (_showFrozenHint && !_loading)
-              Positioned(
-                left: 24,
-                right: 24,
-                bottom: 120,
-                child: _ArkFrozenHint(
-                  hasOtherProviders: widget.providers.length > 1,
-                  onTryAnotherSource: () =>
-                      _openSettingsSheet(initialPage: _SheetPage.server),
-                  onWatchEmbedded: _openWebViewFallback,
-                ),
-              ),
-          ],
+          ),
         ),
       ),
     );
@@ -962,6 +1124,15 @@ class _ArkSettingsSheetState extends State<_ArkSettingsSheet> {
           onTap: () => _goTo(_SheetPage.speed),
         ),
         _ArkSheetRow(
+          icon: Icons.manage_search_outlined,
+          label: 'Search Subtitles',
+          value: '',
+          onTap: () {
+            Navigator.of(context).pop();
+            _showExternalSubtitleSearch();
+          },
+        ),
+        _ArkSheetRow(
           icon: Icons.format_color_text_outlined,
           label: 'Subtitle Settings',
           value: '',
@@ -1128,22 +1299,8 @@ class _ArkSettingsSheetState extends State<_ArkSettingsSheet> {
                 setState(() {});
               },
             ),
-        const Divider(color: Colors.white24, height: 24),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('Search subtitles',
-                style: TextStyle(color: Colors.white54, fontSize: 12)),
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _showExternalSubtitleSearch();
-              },
-              child: Text('Search', style: TextStyle(color: accent)),
-            ),
-          ],
-        ),
         if (s._activeSubtitleRawContent != null) ...[
+          const Divider(color: Colors.white24, height: 24),
           const SizedBox(height: 4),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1413,6 +1570,8 @@ class _ArkChrome extends StatelessWidget {
     required this.onSeekForward,
     required this.onScrub,
     required this.onOpenSettings,
+    required this.isFullscreen,
+    required this.onToggleFullscreen,
     required this.formatDuration,
   });
 
@@ -1425,6 +1584,8 @@ class _ArkChrome extends StatelessWidget {
   final VoidCallback onSeekForward;
   final ValueChanged<Duration> onScrub;
   final VoidCallback onOpenSettings;
+  final bool isFullscreen;
+  final VoidCallback onToggleFullscreen;
   final String Function(Duration) formatDuration;
 
   @override
@@ -1560,6 +1721,14 @@ class _ArkChrome extends StatelessWidget {
                             color: Colors.white),
                         onPressed: onOpenSettings,
                       ),
+                      IconButton(
+                        icon: Icon(
+                            isFullscreen
+                                ? Icons.fullscreen_exit_rounded
+                                : Icons.fullscreen_rounded,
+                            color: Colors.white),
+                        onPressed: onToggleFullscreen,
+                      ),
                     ],
                   ),
                 ],
@@ -1568,6 +1737,116 @@ class _ArkChrome extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The pause/loading title card - mirrors custom-player.js's
+/// .ark-loading/.ark-pause-card: title, a "year - runtime - rating - genres"
+/// facts line (any missing part is skipped, same as that file's factsLine
+/// builder), and an overview blurb. Drawn on top of the chrome but wrapped
+/// in IgnorePointer so it stays purely decorative - taps still fall through
+/// to the tap-to-toggle-chrome layer underneath, unchanged.
+class _ArkTitleCard extends StatelessWidget {
+  const _ArkTitleCard({
+    required this.title,
+    required this.overview,
+    required this.yearLabel,
+    required this.runtimeMinutes,
+    required this.rating,
+    required this.genres,
+    required this.isLoading,
+    required this.accent,
+  });
+
+  final String title;
+  final String? overview;
+  final String? yearLabel;
+  final int? runtimeMinutes;
+  final double? rating;
+  final List<String> genres;
+  final bool isLoading;
+  final Color accent;
+
+  String? get _runtimeLabel {
+    final minutes = runtimeMinutes;
+    if (minutes == null || minutes <= 0) return null;
+    final hours = minutes ~/ 60;
+    final remaining = minutes % 60;
+    return hours > 0 ? '${hours}h ${remaining}m' : '${minutes}m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final facts = [
+      yearLabel,
+      _runtimeLabel,
+      if (rating != null && rating! > 0) '★ ${rating!.toStringAsFixed(1)}',
+      if (genres.isNotEmpty) genres.take(3).join(', '),
+    ].where((part) => (part ?? '').isNotEmpty).join('   ·   ');
+
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Container(
+          color: Colors.black.withOpacity(0.45),
+          alignment: Alignment.center,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700),
+                  ),
+                  if (facts.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      facts,
+                      textAlign: TextAlign.center,
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 13),
+                    ),
+                  ],
+                  if ((overview ?? '').isNotEmpty) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      overview!,
+                      textAlign: TextAlign.center,
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 13, height: 1.4),
+                    ),
+                  ],
+                  if (isLoading) ...[
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: 120,
+                      child: LinearProgressIndicator(
+                        color: accent,
+                        backgroundColor: Colors.white24,
+                        minHeight: 3,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('Loading video…',
+                        style: TextStyle(color: Colors.white54, fontSize: 12)),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

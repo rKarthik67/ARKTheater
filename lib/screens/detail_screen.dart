@@ -288,6 +288,12 @@ class _DetailScreenState extends State<DetailScreen> {
           .read<RecentlyWatchedProvider>()
           .record(item: widget.item, season: season, episode: episode);
 
+      // Already resolved by the time a play button is tappable (this
+      // FutureBuilder's content is on screen), so this just reads the
+      // cached detail - not a new network round-trip.
+      final detail = await _future;
+      if (!mounted) return;
+
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => PlayerScreen(
@@ -300,6 +306,11 @@ class _DetailScreenState extends State<DetailScreen> {
             providers: providers,
             initialProviderIndex: resolvedSelection.index,
             initialResult: resolvedSelection.result,
+            overview: detail.item.overview,
+            yearLabel: detail.item.year,
+            runtimeMinutes: detail.runtimeMinutes,
+            rating: detail.item.voteAverage,
+            genres: detail.genres,
           ),
         ),
       );
@@ -379,6 +390,8 @@ class _DetailScreenState extends State<DetailScreen> {
             episode: episode,
           );
       if (!mounted) return;
+      final detail = await _future;
+      if (!mounted) return;
       await Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => PlayerScreen(
@@ -391,6 +404,11 @@ class _DetailScreenState extends State<DetailScreen> {
             providers: providers,
             initialProviderIndex: 0,
             initialResult: result,
+            overview: detail.item.overview,
+            yearLabel: detail.item.year,
+            runtimeMinutes: detail.runtimeMinutes,
+            rating: detail.item.voteAverage,
+            genres: detail.genres,
           ),
         ),
       );
