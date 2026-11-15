@@ -120,21 +120,25 @@ const List<Color> kAppColorSwatches = [
   Color(0xFF8A8F9C), // slate gray
   Color(0xFF000000), // jet black
 
-  // Golds / warm metals - gold-1/2/3/4 mirror ark-theater-play-web's own
-  // --gold-1..4 gradient shades (css/styles.css), so the app's accent
-  // picker offers the same warm-gold range the reference web app's
-  // buttons/highlights use.
-  Color(0xFFE0A83A), // app default accent (metallic gold)
-  Color(0xFFFFD27A), // gold-1 (lightest, ark-theater-play-web)
+  // Golds / warm metals - no longer the app default (see AppTheme.accent),
+  // kept as alternate choices.
+  Color(0xFFFFD27A), // gold-1
   Color(0xFFF6D68A), // warm champagne
   Color(0xFFD4AF37), // classic gold
   Color(0xFFE8C4A0), // soft copper
   Color(0xFFCD7F32), // bronze
-  Color(0xFFFFB347), // gold-2 / amber (ark-theater-play-web)
-  Color(0xFFE8891A), // gold-3 (ark-theater-play-web)
-  Color(0xFF8A4A12), // gold-4 (deepest, ark-theater-play-web)
+  Color(0xFFFFB347), // gold-2 / amber
+  Color(0xFFE0A83A), // gold-3 (previous app default accent)
+  Color(0xFFE8891A), // gold-4
+  Color(0xFF8A4A12), // gold-5 (deepest)
 
-  // Reds / pinks
+  // Reds / pinks - ff1f2d/e50914/b20710 mirror ark-theater-play-web's own
+  // --gold-1..3 shades (css/styles.css), which are themselves Netflix red
+  // now, so the app's accent picker offers the same red range the
+  // reference web app's buttons/highlights use.
+  Color(0xFFE50914), // app default accent (Netflix red)
+  Color(0xFFFF1F2D), // Netflix red, lightest
+  Color(0xFFB20710), // Netflix red, darkest
   Color(0xFFEF6B5A), // coral red
   Color(0xFFE0526B), // rose
   Color(0xFFE23E57), // cinema red

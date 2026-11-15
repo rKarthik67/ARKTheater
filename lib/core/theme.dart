@@ -46,20 +46,21 @@ class AppTheme {
   static const Color border = Color(0xFF292C34);
   static const Color borderWarm = Color(0xFF3A3E49);
 
-  // --- Accent: C.L.A.R.A.'s metallic gold (--gold family) - the app's
-  // *default* accent. A user-chosen accent (SettingsProvider.accentColor)
-  // overrides this in themeFor()'s ColorScheme/component themes, but this
-  // constant stays as the fallback and is still what a handful of widgets
-  // reference directly for one-off highlights that aren't Theme-driven. ---
-  static const Color accent = Color(0xFFE0A83A);
-  static const Color accentHigh = Color(0xFFF6D68A);
-  static const Color accentLow = Color(0xFFA9761C);
-  static const Color accentDim = Color(0xFF4A3A18);
-  static const Color accentGlow = Color(0x38E0A83A);
+  // --- Accent: Netflix red - the app's *default* accent. A user-chosen
+  // accent (SettingsProvider.accentColor) overrides this in themeFor()'s
+  // ColorScheme/component themes, but this constant stays as the fallback
+  // and is still what a handful of widgets reference directly for one-off
+  // highlights that aren't Theme-driven. ---
+  static const Color accent = Color(0xFFE50914);
+  static const Color accentHigh = Color(0xFFFF1F2D);
+  static const Color accentLow = Color(0xFFB20710);
+  static const Color accentDim = Color(0xFF4A1013);
+  static const Color accentGlow = Color(0x38E50914);
 
-  /// Dark text C.L.A.R.A. sets on top of its gold buttons - not just
-  /// black, a warm near-black that reads better against the gold gradient.
-  static const Color goldText = Color(0xFF221703);
+  /// Light text set on top of the red accent buttons/badges - the old gold
+  /// accent was bright enough for dark near-black text; red is darker, so
+  /// this needs to be light instead to stay legible.
+  static const Color goldText = Color(0xFFF5F5F7);
 
   // --- Semantic (C.L.A.R.A.'s --ok/--warn/--err) ---
   static const Color success = Color(0xFF8FB84A);
