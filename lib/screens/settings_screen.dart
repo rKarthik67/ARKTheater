@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:provider/provider.dart';
@@ -371,6 +372,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     defaultColor: settings.accentColor ?? AppTheme.accent,
                     onSelect: (color) => settings.setPlayerAccentColor(color),
                   ),
+                  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) ...[
+                    const Divider(height: 24),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      dense: true,
+                      activeColor: AppTheme.resolvedAccent(context),
+                      title: Text('Use new player (beta)', style: AppTheme.cardTitleStyle(context)),
+                      subtitle: Text(
+                        'An alternate player UI with a bottom-sheet settings '
+                        'panel, matching the ArkPlayer web design. Same '
+                        'playback engine and features as the current player.',
+                        style: AppTheme.metaStyle(context),
+                      ),
+                      value: settings.useArkPlayer,
+                      onChanged: settings.isLoaded ? (value) => settings.setUseArkPlayer(value) : null,
+                    ),
+                  ],
                 ],
               ),
             ),

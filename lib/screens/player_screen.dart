@@ -1,9 +1,12 @@
 import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb, TargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../models/media_item.dart';
+import '../state/settings_provider.dart';
 import '../video_providers/common.dart';
 import '../video_providers/names.dart';
+import 'ark_mobile_player_screen.dart';
 import 'desktop_player_screen.dart';
 import 'macos_player_screen.dart';
 import 'mobile_player_screen.dart';
@@ -63,6 +66,21 @@ class PlayerScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (_usesMobileEngine) {
+      // ArkMobilePlayerScreen is an alternate, opt-in UI over the exact same
+      // better_player_plus engine and feature set - see Settings > Player
+      // Controls Color > "Use new player (beta)".
+      if (context.watch<SettingsProvider>().useArkPlayer) {
+        return ArkMobilePlayerScreen(
+          title: title,
+          mediaType: mediaType,
+          tmdbId: tmdbId,
+          season: season,
+          episode: episode,
+          providers: providers,
+          initialProviderIndex: initialProviderIndex,
+          initialResult: initialResult,
+        );
+      }
       return MobilePlayerScreen(
         title: title,
         mediaType: mediaType,

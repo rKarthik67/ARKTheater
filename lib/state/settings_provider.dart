@@ -38,6 +38,7 @@ class SettingsProvider extends ChangeNotifier {
   static const _fontFamilyKeyPrefix = 'settings_font_family_';
   static const _fontColorKeyPrefix = 'settings_font_color_';
   static const _reduceMotionKey = 'settings_reduce_motion';
+  static const _useArkPlayerKey = 'settings_use_ark_player';
   static const _textScaleKey = 'settings_text_scale';
   static const _watchRegionKey = 'settings_watch_region';
   static const _scrollAnimationColorKey = 'settings_scroll_animation_color';
@@ -109,6 +110,13 @@ class SettingsProvider extends ChangeNotifier {
   bool _reduceMotion = false;
   bool get reduceMotion => _reduceMotion;
 
+  /// Android-only: routes `PlayerScreen` to `ArkMobilePlayerScreen` (a
+  /// bottom-sheet UI matching ark-theater-play-web's ArkPlayer) instead of
+  /// the default `MobilePlayerScreen`. Both screens share the same
+  /// better_player_plus engine and feature set - this only swaps the chrome.
+  bool _useArkPlayer = false;
+  bool get useArkPlayer => _useArkPlayer;
+
   /// Multiplies every text size in the app, applied once at the root via
   /// MediaQuery's textScaler (see ArkTheaterApp). 1.0 is the design size.
   double _textScale = 1.0;
@@ -173,6 +181,7 @@ class SettingsProvider extends ChangeNotifier {
         _playerAccentColor = Color(playerAccentValue);
       }
       _reduceMotion = prefs.getBool(_reduceMotionKey) ?? false;
+      _useArkPlayer = prefs.getBool(_useArkPlayerKey) ?? false;
       final scale = prefs.getDouble(_textScaleKey);
       if (scale != null) _textScale = scale.clamp(minTextScale, maxTextScale);
       _watchRegion = prefs.getString(_watchRegionKey) ?? 'IN';
@@ -323,6 +332,18 @@ class SettingsProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(_reduceMotionKey, value);
+    } catch (_) {
+      // Best-effort persistence.
+    }
+  }
+
+  Future<void> setUseArkPlayer(bool value) async {
+    if (value == _useArkPlayer) return;
+    _useArkPlayer = value;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_useArkPlayerKey, value);
     } catch (_) {
       // Best-effort persistence.
     }
